@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:file_picker/file_picker.dart';
@@ -201,20 +200,20 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               //color: Theme.of(context).primaryColor,
               child: AnimatedSwitcher(
-                duration: Duration(milliseconds: 400),
+                duration: const Duration(milliseconds: 300),
                 child: page,
                 transitionBuilder: (Widget child, Animation<double> animation) {
-                  return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0.0, 0.5),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: FadeTransition(
+                  return FadeTransition(
                       opacity: Tween<double>(
                         begin: 0.0,
                         end: 1.0,
                       ).animate(animation),
-                      child: child,
+                      child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0.0, 0.05),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
                     ),
                   );
                 }
@@ -547,10 +546,6 @@ class _CommonPatchScaffoldState extends State<CommonPatchScaffold> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    child: const Text(
-                      "Patch",
-                      textScaler: TextScaler.linear(1.5),
-                    ),
                     onPressed: !MyCfg.isPatching
                         ? () async {
                             setState(() {
@@ -566,6 +561,10 @@ class _CommonPatchScaffoldState extends State<CommonPatchScaffold> {
                             });
                           }
                         : null,
+                    child: const Text(
+                      "Patch",
+                      textScaler: TextScaler.linear(1.5),
+                    ),
                   )
                 ],
               ))
