@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter/animation.dart';
 
 import 'package:root_patcher/magisk_helper.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // TODO: Load json from settings.json
 
   runApp(const MyApp());
 
@@ -41,11 +41,40 @@ class MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    var lightTheme = ThemeData.light(useMaterial3: useMaterial3);
+    var darkTheme = ThemeData.dark(useMaterial3: useMaterial3);
+    var lightSnackBarTheme = SnackBarThemeData(
+      backgroundColor: lightTheme.cardColor,
+      actionBackgroundColor: lightTheme.buttonTheme.colorScheme!.primary,
+      actionTextColor: lightTheme.buttonTheme.colorScheme!.onPrimary,
+      elevation: 4.0,
+      width: 420,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(5),
+      ),
+      behavior: SnackBarBehavior.floating,
+      contentTextStyle: const TextStyle(color: Colors.black),
+      insetPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+    );
+    var darkSnackBarTheme = SnackBarThemeData(
+      backgroundColor: darkTheme.cardColor,
+      actionBackgroundColor: darkTheme.buttonTheme.colorScheme!.primary,
+      actionTextColor: darkTheme.buttonTheme.colorScheme!.onPrimary,
+      elevation: 4.0,
+      width: 420,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      behavior: SnackBarBehavior.floating,
+      contentTextStyle: const TextStyle(color: Colors.white),
+      insetPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+    );
+
     return MaterialApp(
       title: 'Flutter Demo',
-      theme: ThemeData.light(useMaterial3: useMaterial3),
-      darkTheme: ThemeData.dark(useMaterial3: useMaterial3),
+      theme: lightTheme.copyWith(snackBarTheme: lightSnackBarTheme),
+      darkTheme: darkTheme.copyWith(snackBarTheme: darkSnackBarTheme),
       themeMode: _themeMode,
+      // snak bar theme
+
       home: const MyHomePage(),
     );
   }
@@ -89,6 +118,7 @@ class MagiskSpec {
   static List<String>? magiskList;
   static int magiskSelection = 0;
   static String? localMagiskApk;
+  static Map<String, Map<String, String>>? magiskInfo;
 }
 
 class ApatchSpec {
@@ -96,9 +126,24 @@ class ApatchSpec {
 }
 
 class MyCfg {
+  // Common
   static String? bootImage;
   static bool isPatching = false;
+  static bool useProxy = false;
+  static String? proxy;
+
+  // Magisk
   static bool magiskApkFromOnline = false;
+  static bool magiskDownloadFromJsdelivr = false;
+  static bool magiskFromCustomSource = false;
+  static String? magiskCustomSource;
+
+  // KernelSU
+  // ...
+
+  // APatch
+  static bool apatchUseLocalKpimg = false;
+  static String? apatchLocalKpimg;
 }
 
 class MyHomePage extends StatefulWidget {
@@ -191,34 +236,34 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             Expanded(
                 child: Container(
-              //color: Theme.of(context).primaryColor,
-              decoration: BoxDecoration(
-                color: Theme.of(context).hoverColor,
-                borderRadius: Theme.of(context).useMaterial3
-                    ? const BorderRadius.only(topLeft: Radius.circular(10))
-                    : null,
-              ),
-              //color: Theme.of(context).primaryColor,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                child: page,
-                transitionBuilder: (Widget child, Animation<double> animation) {
-                  return FadeTransition(
-                      opacity: Tween<double>(
-                        begin: 0.0,
-                        end: 1.0,
-                      ).animate(animation),
-                      child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0.0, 0.05),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
+                    //color: Theme.of(context).primaryColor,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).hoverColor,
+                      borderRadius: Theme.of(context).useMaterial3
+                          ? const BorderRadius.only(
+                              topLeft: Radius.circular(10))
+                          : null,
                     ),
-                  );
-                }
-                )
-            )),
+                    //color: Theme.of(context).primaryColor,
+                    child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: page,
+                        transitionBuilder:
+                            (Widget child, Animation<double> animation) {
+                          return FadeTransition(
+                            opacity: Tween<double>(
+                              begin: 0.0,
+                              end: 1.0,
+                            ).animate(animation),
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0.0, 0.05),
+                                end: Offset.zero,
+                              ).animate(animation),
+                              child: child,
+                            ),
+                          );
+                        }))),
           ],
         ),
       );
@@ -313,8 +358,8 @@ class _MagiskPatchPageState extends State<MagiskPatchPage> {
   Future<List<String>> fetchData() async {
     var m = MagiskHelper();
     if (MagiskSpec.magiskList == null) {
-      var info = await m.getMagiskReleasesInfo();
-      MagiskSpec.magiskList = info.keys.toList();
+      MagiskSpec.magiskInfo = await m.getMagiskReleasesInfo();
+      MagiskSpec.magiskList = MagiskSpec.magiskInfo!.keys.toList();
     }
     return MagiskSpec.magiskList!;
   }
@@ -402,7 +447,8 @@ class MagiskApkSelectCard extends StatefulWidget {
 }
 
 class _MagiskApkSelectCardState extends State<MagiskApkSelectCard> {
-  final _textEditingController = TextEditingController(text: MagiskSpec.localMagiskApk);
+  final _textEditingController =
+      TextEditingController(text: MagiskSpec.localMagiskApk);
 
   @override
   Widget build(BuildContext context) {
@@ -457,7 +503,6 @@ class _MagiskPatchConfigListViewState extends State<MagiskPatchConfigListView> {
               MagiskPatchPage.of(context).setState(() {
                 //MyCfg.magiskApkFromOnline = !MyCfg.magiskApkFromOnline;
               });
-              ;
             }),
         CheckboxListTile(
             title: const Text("Keep verity"),
@@ -609,67 +654,26 @@ class APatchPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      alignment: Alignment.topCenter,
-      padding: const EdgeInsets.all(20.0),
-      child: Column(
-        //mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return CommonPatchScaffold(
+      onPatchPressed: () {},
+      child: ListView(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.only(right: 20),
-                child: const Text("Boot image:"),
+          CardTile(labelText: "Common", children: [
+            const SizedBox(height: 10),
+            TextField(
+              controller: TextEditingController(text: ApatchSpec.superKey),
+              decoration: const InputDecoration(
+                labelText: "SuperKey",
+                border: OutlineInputBorder(),
               ),
-              Expanded(
-                child: TextFormField(
-                  initialValue: MyCfg.bootImage,
-                  enabled: false,
-                ),
-              )
-            ],
-          ),
-          const SizedBox(height: 20),
-          const ListTile(title: Text("Common")),
-          Expanded(
-              flex: 0,
-              child: Container(
-                padding: const EdgeInsets.only(left: 20, right: 20),
-                child: TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: "SuperKey",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              )),
-          const Divider(),
-          Expanded(
-            child: ListView(
-              children: [
-                ExpansionTile(
-                  backgroundColor: Theme.of(context).cardColor,
-                  title: const Text("Advanced"),
-                  children: List.generate(
-                      20, (index) => ListTile(title: Text("Index : $index"))),
-                )
-              ],
-            ),
-          ),
-          const Divider(),
-          Container(
-              alignment: Alignment.bottomCenter,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    child: const Text(
-                      "Patch",
-                      textScaler: TextScaler.linear(1.5),
-                    ),
-                    onPressed: () {},
-                  )
-                ],
-              ))
+              onChanged: (value) {
+                ApatchSpec.superKey = value;
+              },
+            )
+          ]),
+          const CardTile(labelText: "Advanced", children: [
+            ListTile(title: Text("This not impletation yet")),
+          ])
         ],
       ),
     );
@@ -804,34 +808,149 @@ class CardTile extends StatelessWidget {
   }
 }
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  final _kpimgEditingController =
+      TextEditingController(text: MyCfg.apatchLocalKpimg);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      child: ListView(
-        children: [
-          const CardTile(labelText: "About", children: [
-            ListTile(
-              title: Text("Author"),
-              trailing: Text("affggh"),
-            ),
-            ListTile(
-              title: Text("Version"),
-              trailing: Text("1.0.0"),
-            )
-          ]),
-          CardTile(
-              labelText: "TEST1",
-              children: List.generate(
-                  20,
-                  (index) => ListTile(
-                      title: const Text("TEST"),
-                      trailing: Text("Index:$index")))),
-        ],
-      ),
-    );
+        padding: const EdgeInsets.all(20),
+        child: Column(children: [
+          Expanded(
+            child: ListView(children: [
+              CardTile(labelText: "Common Settings", children: [
+                SwitchListTile(
+                    title: const Text("Use Proxy"),
+                    value: MyCfg.useProxy,
+                    onChanged: (value) => setState(() {
+                          MyCfg.useProxy = value;
+                        })),
+                MyCfg.useProxy
+                    ? Expanded(
+                        flex: 0,
+                        child: TextFormField(
+                          decoration: const InputDecoration(
+                            label: Text("Proxy"),
+                            //border: OutlineInputBorder(),
+                          ),
+                          onChanged: (value) {
+                            MyCfg.proxy = value;
+                          },
+                        ))
+                    : Container()
+              ]),
+              CardTile(
+                labelText: 'Magisk',
+                children: [
+                  SwitchListTile(
+                      title: const Text("Magisk from custom source"),
+                      subtitle: const Text(
+                          "Parse magisk list and download info from custom source"),
+                      value: MyCfg.magiskFromCustomSource,
+                      onChanged: (value) => setState(() {
+                            MyCfg.magiskFromCustomSource = value;
+                          })),
+                  MyCfg.magiskFromCustomSource
+                      ? Expanded(
+                          flex: 0,
+                          child: TextFormField(
+                            decoration: const InputDecoration(
+                              label: Text("Custom source"),
+                              //border: OutlineInputBorder(),
+                            ),
+                            onChanged: (value) {
+                              MyCfg.magiskCustomSource = value;
+                            },
+                          ))
+                      : Container(),
+                  SwitchListTile(
+                      title: const Text("Fetch magisk from jsDelivr"),
+                      subtitle: const Text(
+                          "If you patch magisk from github, will parse github download url to jsDelivr download url"),
+                      value: MyCfg.magiskDownloadFromJsdelivr,
+                      onChanged: (value) => setState(() {
+                            MyCfg.magiskDownloadFromJsdelivr = value;
+                          })),
+                ],
+              ),
+              CardTile(labelText: "APatch", children: [
+                SwitchListTile(
+                    title: const Text("Use kpimg from local"),
+                    value: MyCfg.apatchUseLocalKpimg,
+                    onChanged: (value) => setState(() {
+                          MyCfg.apatchUseLocalKpimg = value;
+                        })),
+                MyCfg.apatchUseLocalKpimg
+                    ? Row(children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _kpimgEditingController,
+                            decoration: const InputDecoration(
+                              label: Text("Kpimg path"),
+                              //border: OutlineInputBorder(),
+                            ),
+                            onChanged: (value) {
+                              MyCfg.apatchLocalKpimg = value;
+                            },
+                          ),
+                        ),
+                        IconButton.filledTonal(
+                            onPressed: () async {
+                              var result =
+                                  await FilePicker.platform.pickFiles();
+
+                              if (result != null) {
+                                setState(
+                                  () {
+                                    _kpimgEditingController.text =
+                                        result.paths.single!;
+                                  },
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.file_open))
+                      ])
+                    : Container(),
+              ]),
+              const CardTile(labelText: "About", children: [
+                ListTile(
+                  title: Text("Author"),
+                  trailing: Text("affggh"),
+                ),
+                ListTile(
+                  title: Text("Version"),
+                  trailing: Text("1.0.0"),
+                )
+              ]),
+            ]),
+          ),
+          const Divider(),
+          Container(
+            alignment: Alignment.bottomRight,
+            child: TextButton(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: const Text("Saved!"),
+                    action: SnackBarAction(
+                        label: "OK",
+                        onPressed: () {
+                          // TODO: impl settings save to file
+                        }),
+                  ));
+                },
+                child: const Text(
+                  "Save",
+                  textScaler: TextScaler.linear(1.5),
+                )),
+          ),
+        ]));
   }
 }
