@@ -757,40 +757,38 @@ class TitleBar extends StatelessWidget {
           : Colors.white.withOpacity(0.08),
     );
 
-    return Platform.isWindows
-        ? MoveWindow(
-            child: Row(
-              children: [
-                const SizedBox(
-                  width: 60,
-                  child: Icon(Icons.android),
-                ),
-                const Text(
-                  "Root patcher",
-                  style: TextStyle(
-                    fontSize: 24,
-                  ),
-                ),
-                const Spacer(),
-                const ChangeMaterialDesign3Button(),
-                const LightDarkButtons(),
-                MinimizeWindowButton(
-                  colors: colors,
-                  animate: false,
-                ),
-                MaximizeWindowButton(
-                  colors: colors,
-                ),
-                CloseWindowButton(
-                  colors: colors,
-                  onPressed: () {
-                    appWindow.close();
-                  },
-                ),
-              ],
+    return MoveWindow(
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 60,
+            child: Icon(Icons.android),
+          ),
+          const Text(
+            "Root patcher",
+            style: TextStyle(
+              fontSize: 24,
             ),
-          )
-        : Container();
+          ),
+          const Spacer(),
+          const ChangeMaterialDesign3Button(),
+          const LightDarkButtons(),
+          MinimizeWindowButton(
+            colors: colors,
+            animate: false,
+          ),
+          MaximizeWindowButton(
+            colors: colors,
+          ),
+          CloseWindowButton(
+            colors: colors,
+            onPressed: () {
+              appWindow.close();
+            },
+          ),
+        ],
+      ),
+    );
   }
 }
 
