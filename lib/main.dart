@@ -182,29 +182,17 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   var selectedIndex = 0;
+  final List<Widget> pages = [
+    const HelloPage(),
+    const MagiskPatchPage(),
+    const KernelSUPatchPage(),
+    const APatchPage(),
+    const SettingsPage(),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    Widget page;
-    switch (selectedIndex) {
-      case 0:
-        page = const HelloPage();
-        break;
-      case 1:
-        page = const MagiskPatchPage();
-        break;
-      case 2:
-        page = const KernelSUPatchPage();
-        break;
-      case 3:
-        page = const APatchPage();
-        break;
-      case 4:
-        page = const SettingsPage();
-        break;
-      default:
-        throw UnimplementedError("no widget for selectedIndex:$selectedIndex");
-    }
+    Widget page = pages[selectedIndex];
     return LayoutBuilder(builder: (context, constraints) {
       return Scaffold(
         appBar: PreferredSize(
@@ -771,7 +759,6 @@ class _TitleBarState extends State<TitleBar> with WindowListener {
   @override
   Widget build(BuildContext context) {
     Brightness brightness = Theme.of(context).brightness;
-    bool isLight = brightness == Brightness.light;
 
     return PreferredSize(
       preferredSize: const Size.fromHeight(80),
