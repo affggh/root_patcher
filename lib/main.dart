@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 //import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:file_picker/file_picker.dart';
@@ -11,7 +12,7 @@ import 'package:root_patcher/magisk_helper.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await windowManager.ensureInitialized();
 
   WindowOptions windowOptions = const WindowOptions(
@@ -747,46 +748,137 @@ class APatchPage extends StatelessWidget {
   }
 }
 
-class TitleBar extends StatelessWidget {
+class TitleBar extends StatefulWidget {
   const TitleBar({super.key});
+
+  @override
+  State<TitleBar> createState() => _TitleBarState();
+}
+
+class _TitleBarState extends State<TitleBar> with WindowListener {
+  @override
+  void initState() {
+    windowManager.addListener(this);
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     Brightness brightness = Theme.of(context).brightness;
     bool isLight = brightness == Brightness.light;
 
-    return const Row(children: [
-      SizedBox(
-        width: 60,
-        height: 80,
-        child: Icon(Icons.android),
-      ),
-      Text(
-        "Root patcher",
-        style: TextStyle(
-          fontSize: 24,
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(80),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Colors.transparent,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: DragToMoveArea(
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        margin: const EdgeInsets.all(20),
+                        child: const Icon(Icons.android),
+                      ),
+                      const Text(
+                        "Root Patcher",
+                        style: TextStyle(
+                          fontSize: 24,
+                        ),
+                      ),
+                    ]),
+              ),
+            ),
+            const ChangeMaterialDesign3Button(),
+            const LightDarkButtons(),
+            PreferredSize(
+                preferredSize: const Size.fromHeight(36),
+                child: Row(children: [
+                  WindowCaptionButton.minimize(
+                    brightness: brightness,
+                    onPressed: () async {
+                      bool isMinimized = await windowManager.isMinimized();
+                      if (isMinimized) {
+                        windowManager.restore();
+                      } else {
+                        windowManager.minimize();
+                      }
+                    },
+                  ),
+                  FutureBuilder(
+                    future: windowManager.isMaximized(),
+                    builder: (context, snapshot) {
+                      if (snapshot.data == false) {
+                        return WindowCaptionButton.maximize(
+                          brightness: brightness,
+                          onPressed: () {
+                            windowManager.maximize();
+                          },
+                        );
+                      } else {
+                        return WindowCaptionButton.unmaximize(
+                          brightness: brightness,
+                          onPressed: () {
+                            windowManager.unmaximize();
+                          },
+                        );
+                      }
+                    },
+                  ),
+                  WindowCaptionButton.close(
+                    brightness: brightness,
+                    onPressed: () {
+                      windowManager.close();
+                    },
+                  ),
+                ])),
+          ],
         ),
       ),
-      Spacer(),
-      ChangeMaterialDesign3Button(),
-      LightDarkButtons(),
-    ]);
+    );
+  }
+
+  @override
+  void onWindowMaximize() {
+    setState(() {});
+  }
+
+  @override
+  void onWindowUnmaximize() {
+    setState(() {});
   }
 }
 
-class ChangeMaterialDesign3Button extends StatelessWidget {
+class ChangeMaterialDesign3Button extends StatefulWidget {
   const ChangeMaterialDesign3Button({super.key});
 
+  @override
+  State<ChangeMaterialDesign3Button> createState() =>
+      _ChangeMaterialDesign3ButtonState();
+}
+
+class _ChangeMaterialDesign3ButtonState
+    extends State<ChangeMaterialDesign3Button> {
   @override
   Widget build(BuildContext context) {
     bool md3 = Theme.of(context).useMaterial3;
 
-    return TextButton(
-      child: Text(md3 ? "MaterialDesign3" : "MaterialDesign2"),
-      onPressed: () {
-        MyApp.of(context).changeUseMaterialDesign3(!md3);
-      },
-    );
+    return IconButton(
+        onPressed: () {
+          MyApp.of(context).changeUseMaterialDesign3(!md3);
+        },
+        icon: Icon(md3 ? Icons.looks_3_outlined : Icons.looks_two_outlined));
   }
 }
 
