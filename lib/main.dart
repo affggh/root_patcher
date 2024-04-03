@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:root_patcher/magisk_helper.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // TODO: Load json from settings.json
 
   runApp(const MyApp());
 
@@ -62,7 +62,7 @@ class MyAppState extends State<MyApp> {
       actionTextColor: darkTheme.buttonTheme.colorScheme!.onPrimary,
       elevation: 4.0,
       width: 420,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
       behavior: SnackBarBehavior.floating,
       contentTextStyle: const TextStyle(color: Colors.white),
       insetPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
@@ -121,11 +121,23 @@ class MagiskSpec {
   static Map<String, Map<String, String>>? magiskInfo;
 }
 
+class KernelSUSpec {
+  static int ksuModuleSelection = 0;
+}
+
 class ApatchSpec {
   static String? superKey;
 }
 
 class MyCfg {
+  static int versionMajor = 1;
+  static int versionMinor = 0;
+  static int versionPatch = 0;
+  static String versionString = "$versionMajor.$versionMinor.$versionPatch";
+
+  // Settings initialized
+  static bool isSettingsInitialed = false;
+
   // Common
   static String? bootImage;
   static bool isPatching = false;
@@ -134,12 +146,13 @@ class MyCfg {
 
   // Magisk
   static bool magiskApkFromOnline = false;
-  static bool magiskDownloadFromJsdelivr = false;
+  static bool magiskDownloadFromJsdelivr = true; // faster for everyone
   static bool magiskFromCustomSource = false;
   static String? magiskCustomSource;
 
   // KernelSU
-  // ...
+  static bool kernelsuUseInitSpecified = false;
+  static String? kernelsuInitSpecified;
 
   // APatch
   static bool apatchUseLocalKpimg = false;
@@ -170,7 +183,7 @@ class _MyHomePageState extends State<MyHomePage> {
         page = const MagiskPatchPage();
         break;
       case 2:
-        page = const Placeholder();
+        page = const KernelSUPatchPage();
         break;
       case 3:
         page = const APatchPage();
@@ -367,7 +380,7 @@ class _MagiskPatchPageState extends State<MagiskPatchPage> {
   @override
   Widget build(BuildContext context) {
     return CommonPatchScaffold(
-      onPatchPressed: () {},
+      onPatchPressed: () async {},
       child: Column(
         children: [
           Expanded(
@@ -540,12 +553,53 @@ class _MagiskPatchConfigListViewState extends State<MagiskPatchConfigListView> {
   }
 }
 
+class KernelSUPatchPage extends StatefulWidget {
+  const KernelSUPatchPage({super.key});
+
+  @override
+  State<KernelSUPatchPage> createState() => _KernelSUPatchPageState();
+}
+
+class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
+  @override
+  Widget build(BuildContext context) {
+    return CommonPatchScaffold(
+        onPatchPressed: () async {},
+        child: CardTile(
+          labelText: 'Select your module version',
+          children: [
+            const SizedBox(
+              height: 10,
+            ),
+            Expanded(
+                child: ListView.builder(
+              itemCount: 10,
+              itemBuilder: (context, index) {
+                return RadioListTile(
+                  title: Text("LKM Demo list index: $index"),
+                  value: index,
+                  groupValue: KernelSUSpec.ksuModuleSelection,
+                  onChanged: (value) => setState(() {
+                    KernelSUSpec.ksuModuleSelection = value!;
+                  }),
+                );
+              },
+            )),
+          ],
+        ));
+  }
+}
+
 class CommonPatchScaffold extends StatefulWidget {
   const CommonPatchScaffold(
-      {super.key, required this.child, required this.onPatchPressed});
+      {super.key,
+      required this.child,
+      required this.onPatchPressed,
+      this.disabled = false});
 
   final Widget child;
-  final void Function()? onPatchPressed;
+  final Future<void> Function()? onPatchPressed;
+  final bool disabled;
 
   @override
   State<CommonPatchScaffold> createState() => _CommonPatchScaffoldState();
@@ -598,7 +652,9 @@ class _CommonPatchScaffoldState extends State<CommonPatchScaffold> {
                               changeNavigateRialWhenPatching();
                             });
 
-                            await Future.delayed(const Duration(seconds: 3));
+                            if (widget.onPatchPressed != null) {
+                              await widget.onPatchPressed!();
+                            }
 
                             setState(() {
                               MyCfg.isPatching = !MyCfg.isPatching;
@@ -655,7 +711,7 @@ class APatchPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CommonPatchScaffold(
-      onPatchPressed: () {},
+      onPatchPressed: () async {},
       child: ListView(
         children: [
           CardTile(labelText: "Common", children: [
@@ -813,11 +869,49 @@ class SettingsPage extends StatefulWidget {
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
+
+  //static _SettingsPageState of(BuildContext context) =>
+  //  context.findAncestorStateOfType<_SettingsPageState>()!;
 }
 
 class _SettingsPageState extends State<SettingsPage> {
   final _kpimgEditingController =
       TextEditingController(text: MyCfg.apatchLocalKpimg);
+  final _ksuInitEditingController =
+      TextEditingController(text: MyCfg.kernelsuInitSpecified);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+    MyCfg.isSettingsInitialed = true;
+  }
+
+  Future<void> _loadSettings() async {
+    if (!MyCfg.isSettingsInitialed) {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      setState(() {
+        MyCfg.useProxy = prefs.getBool('useProxy')!;
+        MyCfg.proxy = prefs.getString('proxy');
+        MyCfg.magiskFromCustomSource = prefs.getBool('magiskFromCustomSource')!;
+        MyCfg.magiskCustomSource = prefs.getString('magiskCustomSource');
+        MyCfg.magiskDownloadFromJsdelivr =
+            prefs.getBool('magiskDownloadFromJsdelivr')!;
+        // no init for kernelsu
+        // no init for apatch
+      });
+    }
+  }
+
+  Future<void> _saveSettings() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    prefs
+      ..setBool('useProxy', MyCfg.useProxy)
+      ..setString('proxy', MyCfg.proxy ?? "")
+      ..setBool('magiskFromCustomSource', MyCfg.magiskFromCustomSource)
+      ..setString('magiskCustomSource', MyCfg.magiskCustomSource ?? "")
+      ..setBool('magiskDownloadFromJsdelivr', MyCfg.magiskDownloadFromJsdelivr);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -826,7 +920,7 @@ class _SettingsPageState extends State<SettingsPage> {
         child: Column(children: [
           Expanded(
             child: ListView(children: [
-              CardTile(labelText: "Common Settings", children: [
+              CardTile(labelText: "General", children: [
                 SwitchListTile(
                     title: const Text("Use Proxy"),
                     value: MyCfg.useProxy,
@@ -881,6 +975,45 @@ class _SettingsPageState extends State<SettingsPage> {
                           })),
                 ],
               ),
+              CardTile(labelText: "KernelSU", children: [
+                SwitchListTile(
+                    title: const Text("Use init from local"),
+                    value: MyCfg.kernelsuUseInitSpecified,
+                    onChanged: (value) => setState(() {
+                          MyCfg.kernelsuUseInitSpecified = value;
+                        })),
+                MyCfg.kernelsuUseInitSpecified
+                    ? Row(children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _ksuInitEditingController,
+                            decoration: const InputDecoration(
+                              label: Text("init path"),
+                              //border: OutlineInputBorder(),
+                            ),
+                            onChanged: (value) {
+                              MyCfg.kernelsuInitSpecified = value;
+                            },
+                          ),
+                        ),
+                        IconButton.filledTonal(
+                            onPressed: () async {
+                              var result =
+                                  await FilePicker.platform.pickFiles();
+
+                              if (result != null) {
+                                setState(
+                                  () {
+                                    _ksuInitEditingController.text =
+                                        result.paths.single!;
+                                  },
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.file_open))
+                      ])
+                    : Container(),
+              ]),
               CardTile(labelText: "APatch", children: [
                 SwitchListTile(
                     title: const Text("Use kpimg from local"),
@@ -920,14 +1053,14 @@ class _SettingsPageState extends State<SettingsPage> {
                       ])
                     : Container(),
               ]),
-              const CardTile(labelText: "About", children: [
-                ListTile(
+              CardTile(labelText: "About", children: [
+                const ListTile(
                   title: Text("Author"),
                   trailing: Text("affggh"),
                 ),
                 ListTile(
-                  title: Text("Version"),
-                  trailing: Text("1.0.0"),
+                  title: const Text("Version"),
+                  trailing: Text(MyCfg.versionString),
                 )
               ]),
             ]),
@@ -936,15 +1069,14 @@ class _SettingsPageState extends State<SettingsPage> {
           Container(
             alignment: Alignment.bottomRight,
             child: TextButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: const Text("Saved!"),
-                    action: SnackBarAction(
-                        label: "OK",
-                        onPressed: () {
-                          // TODO: impl settings save to file
-                        }),
-                  ));
+                onPressed: () async {
+                  await _saveSettings();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: const Text("Saved!"),
+                      action: SnackBarAction(label: "OK", onPressed: () {}),
+                    ));
+                  }
                 },
                 child: const Text(
                   "Save",
