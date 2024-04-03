@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:bitsdojo_window/bitsdojo_window.dart';
+//import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,18 +11,23 @@ import 'package:root_patcher/magisk_helper.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  await windowManager.ensureInitialized();
+
+  WindowOptions windowOptions = const WindowOptions(
+    size: Size(800, 600),
+    center: true,
+    backgroundColor: Colors.transparent,
+    skipTaskbar: false,
+    titleBarStyle: TitleBarStyle.hidden,
+  );
+
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.show();
+    await windowManager.focus();
+  });
 
   runApp(const MyApp());
-
-  if (Platform.isWindows) {
-    doWhenWindowReady(() {
-      appWindow
-        ..size = const Size(860, 560)
-        ..alignment = Alignment.center
-        ..title = "Root Patcher"
-        ..show();
-    });
-  }
 }
 
 class MyApp extends StatefulWidget {
@@ -76,11 +82,10 @@ class MyAppState extends State<MyApp> {
       // snak bar theme
 
       home: Platform.isLinux
-      ? ClipRRect(
-        borderRadius: BorderRadius.circular(10.0),
-        child: const MyHomePage()
-      )
-      : const MyHomePage(),
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(10.0),
+              child: const MyHomePage())
+          : const MyHomePage(),
     );
   }
 
@@ -733,7 +738,8 @@ class APatchPage extends StatelessWidget {
             )
           ]),
           const CardTile(labelText: "Advanced", children: [
-            ListTile(title: Text("This not impletation yet")),
+            ListTile(
+                title: Text("This component has not been implemented yet.")),
           ])
         ],
       ),
@@ -749,51 +755,22 @@ class TitleBar extends StatelessWidget {
     Brightness brightness = Theme.of(context).brightness;
     bool isLight = brightness == Brightness.light;
 
-    WindowButtonColors colors = WindowButtonColors(
-      iconNormal: isLight ? Colors.black : Colors.white,
-      iconMouseDown: isLight ? Colors.black : Colors.white,
-      iconMouseOver: isLight ? Colors.black : Colors.white,
-      normal: Colors.transparent,
-      mouseOver: isLight
-          ? Colors.black.withOpacity(0.04)
-          : Colors.white.withOpacity(0.04),
-      mouseDown: isLight
-          ? Colors.black.withOpacity(0.08)
-          : Colors.white.withOpacity(0.08),
-    );
-
-    return MoveWindow(
-      child: Row(
-        children: [
-          const SizedBox(
-            width: 60,
-            child: Icon(Icons.android),
-          ),
-          const Text(
-            "Root patcher",
-            style: TextStyle(
-              fontSize: 24,
-            ),
-          ),
-          const Spacer(),
-          const ChangeMaterialDesign3Button(),
-          const LightDarkButtons(),
-          MinimizeWindowButton(
-            colors: colors,
-            animate: false,
-          ),
-          MaximizeWindowButton(
-            colors: colors,
-          ),
-          CloseWindowButton(
-            colors: colors,
-            onPressed: () {
-              appWindow.close();
-            },
-          ),
-        ],
+    return const Row(children: [
+      SizedBox(
+        width: 60,
+        height: 80,
+        child: Icon(Icons.android),
       ),
-    );
+      Text(
+        "Root patcher",
+        style: TextStyle(
+          fontSize: 24,
+        ),
+      ),
+      Spacer(),
+      ChangeMaterialDesign3Button(),
+      LightDarkButtons(),
+    ]);
   }
 }
 
