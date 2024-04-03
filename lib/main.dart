@@ -75,10 +75,12 @@ class MyAppState extends State<MyApp> {
       themeMode: _themeMode,
       // snak bar theme
 
-      home: ClipRRect(
-        borderRadius: BorderRadius.circular(5.0),
+      home: Platform.isLinux
+      ? ClipRRect(
+        borderRadius: BorderRadius.circular(10.0),
         child: const MyHomePage()
-      ),
+      )
+      : const MyHomePage(),
     );
   }
 
