@@ -624,6 +624,11 @@ class _KernelSULKMListViewState extends State<KernelSULKMListView> {
             child: const RefreshProgressIndicator(),
           );
         } else {
+          if (snapshot.data == null) {
+            return Container(
+              child: Text("Cannot fetch data from github"),
+            );
+          }
           return KernelSULKMList(data: snapshot.data!);
         }
       },
