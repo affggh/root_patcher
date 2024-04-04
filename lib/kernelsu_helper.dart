@@ -19,6 +19,11 @@ class KernelSUHelper {
     }
   }
 
+  static reset() {
+    rawData = null;
+    jsonData = null;
+  }
+
   static Future<Map<String,String>> getKernelSUKPMInfo() async {
     if (rawData == null) {
       await getKernelSUReleasesInfo();

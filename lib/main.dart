@@ -1,3 +1,4 @@
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -572,12 +573,6 @@ class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
             Row(children: [
               Expanded(
                   child: FilledButton.tonal(
-                      onPressed: () {}, child: const Text("Refresh list"))),
-              const SizedBox(
-                width: 10,
-              ),
-              Expanded(
-                  child: FilledButton.tonal(
                       onPressed: () {
                         // TODO
                         _kernelVersion = "Not implemented yet";
@@ -594,8 +589,6 @@ class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
             (_kernelVersion != null)
                 ? ListTile(title: Text("Get kernel version is $_kernelVersion"))
                 : Container(),
-            
-            const ListTile(title: Text("LKM List")),
 
             const Expanded(
               child: KernelSULKMListView(),
@@ -610,28 +603,44 @@ class KernelSULKMListView extends StatefulWidget {
 
   @override
   State<KernelSULKMListView> createState() => _KernelSULKMListViewState();
+
 }
 
 class _KernelSULKMListViewState extends State<KernelSULKMListView> {
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: KernelSUHelper.getKernelSUKPMList(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Container(
-            alignment: Alignment.topCenter,
-            child: const RefreshProgressIndicator(),
-          );
-        } else {
-          if (snapshot.data == null) {
-            return Container(
-              child: Text("Cannot fetch data from github"),
-            );
-          }
-          return KernelSULKMList(data: snapshot.data!);
-        }
-      },
+    return Column(
+      children: [
+        ListTile(
+          leading: Icon(Icons.list),
+          title: Text("LKM List"),
+          trailing: ElevatedButton.icon(
+            onPressed: () {
+              setState(() {
+                KernelSUHelper.reset();
+              });
+            },
+            label: Icon(Icons.refresh),
+          ),
+        ),
+        FutureBuilder(
+          future: KernelSUHelper.getKernelSUKPMList(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Container(
+                alignment: Alignment.topCenter,
+                child: const RefreshProgressIndicator(),
+              );
+            } else {
+              if (snapshot.data == null) {
+                return const Text("Cannot fetch data from github");
+              }
+              return Expanded(child: KernelSULKMList(data: snapshot.data!));
+            }
+          },
+        ),
+      ],
     );
   }
 }
