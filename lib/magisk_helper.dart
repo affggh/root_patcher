@@ -5,8 +5,8 @@ import 'package:http/http.dart' as http;
 
 class MagiskHelper {
   static const String _githubApiUrlString = "https://api.github.com/repos/topjohnwu/Magisk/releases";
-  dynamic jsonData;
-  String? rawData;
+  static dynamic jsonData;
+  static String? rawData;
 
   Future<Map<String,Map<String,String>>> getMagiskReleasesInfo() async {
     Uri uri = Uri.parse(_githubApiUrlString);

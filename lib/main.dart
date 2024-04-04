@@ -1,14 +1,13 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
-//import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:root_patcher/magisk_helper.dart';
+import 'package:root_patcher/kernelsu_helper.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -331,7 +330,7 @@ class _HelloPageState extends State<HelloPage> {
                   }
                 },
                 icon: const Icon(Icons.file_open),
-                style: ButtonStyle(iconSize: MaterialStateProperty.all(36)),
+                style: ButtonStyle(iconSize: WidgetStateProperty.all(36)),
               ),
             ],
           )),
@@ -560,32 +559,106 @@ class KernelSUPatchPage extends StatefulWidget {
 }
 
 class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
+  String? _kernelVersion;
+
   @override
   Widget build(BuildContext context) {
     return CommonPatchScaffold(
         onPatchPressed: () async {},
-        child: CardTile(
-          labelText: 'Select your module version',
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const SizedBox(
-              height: 10,
+            Row(children: [
+              Expanded(
+                  child: FilledButton.tonal(
+                      onPressed: () {}, child: const Text("Refresh list"))),
+              const SizedBox(
+                width: 10,
+              ),
+              Expanded(
+                  child: FilledButton.tonal(
+                      onPressed: () {
+                        // TODO
+                        _kernelVersion = "Not implemented yet";
+                        setState(() {});
+                      },
+                      child: const Text("Get kernel version"))),
+              const SizedBox(
+                width: 10,
+              ),
+              Expanded(
+                  child: FilledButton.tonal(
+                      onPressed: () {}, child: const Text("Try auto select"))),
+            ]),
+            (_kernelVersion != null)
+                ? ListTile(title: Text("Get kernel version is $_kernelVersion"))
+                : Container(),
+            
+            const ListTile(title: Text("LKM List")),
+
+            const Expanded(
+              child: KernelSULKMListView(),
             ),
-            Expanded(
-                child: ListView.builder(
-              itemCount: 10,
-              itemBuilder: (context, index) {
-                return RadioListTile(
-                  title: Text("LKM Demo list index: $index"),
-                  value: index,
-                  groupValue: KernelSUSpec.ksuModuleSelection,
-                  onChanged: (value) => setState(() {
-                    KernelSUSpec.ksuModuleSelection = value!;
-                  }),
-                );
-              },
-            )),
           ],
         ));
+  }
+}
+
+class KernelSULKMListView extends StatefulWidget {
+  const KernelSULKMListView({super.key});
+
+  @override
+  State<KernelSULKMListView> createState() => _KernelSULKMListViewState();
+}
+
+class _KernelSULKMListViewState extends State<KernelSULKMListView> {
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: KernelSUHelper.getKernelSUKPMList(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            alignment: Alignment.topCenter,
+            child: const RefreshProgressIndicator(),
+          );
+        } else {
+          return KernelSULKMList(data: snapshot.data!);
+        }
+      },
+    );
+  }
+}
+
+class KernelSULKMList extends StatefulWidget {
+  const KernelSULKMList({super.key, required this.data});
+
+  final List<String> data;
+
+  @override
+  State<KernelSULKMList> createState() => _KernelSULKMListState();
+}
+
+class _KernelSULKMListState extends State<KernelSULKMList> {
+  int _lkmSelection = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: widget.data.length,
+      itemBuilder: (context, index) {
+        return RadioListTile<int>(
+            title: Text(widget.data[index]),
+            value: index,
+            groupValue: _lkmSelection,
+            onChanged: (value) {
+              setState(() {
+                _lkmSelection = value!;
+              });
+            });
+      },
+    );
   }
 }
 
