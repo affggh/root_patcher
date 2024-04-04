@@ -2,6 +2,7 @@ import 'dart:developer';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:root_patcher/apatch_helper.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -574,9 +575,25 @@ class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
               Expanded(
                   child: FilledButton.tonal(
                       onPressed: () {
-                        // TODO
-                        _kernelVersion = "Not implemented yet";
-                        setState(() {});
+                        showDialog(
+                            context: context,
+                            builder: (context) {
+                              return AlertDialog(
+                                title: const Text("Fetched kernel version"),
+                                content: Text(
+                                  (_kernelVersion == null)
+                                      ? "Could not fetch kernel version"
+                                      : "Fetched your kernel version is: $_kernelVersion",
+                                ),
+                                actions: [
+                                  TextButton(
+                                      onPressed: () {
+                                        Navigator.pop(context);
+                                      },
+                                      child: const Text("OK")),
+                                ],
+                              );
+                            });
                       },
                       child: const Text("Get kernel version"))),
               const SizedBox(
@@ -586,10 +603,6 @@ class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
                   child: FilledButton.tonal(
                       onPressed: () {}, child: const Text("Try auto select"))),
             ]),
-            (_kernelVersion != null)
-                ? ListTile(title: Text("Get kernel version is $_kernelVersion"))
-                : Container(),
-
             const Expanded(
               child: KernelSULKMListView(),
             ),
@@ -603,25 +616,27 @@ class KernelSULKMListView extends StatefulWidget {
 
   @override
   State<KernelSULKMListView> createState() => _KernelSULKMListViewState();
-
 }
 
 class _KernelSULKMListViewState extends State<KernelSULKMListView> {
-
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         ListTile(
-          leading: Icon(Icons.list),
-          title: Text("LKM List"),
-          trailing: ElevatedButton.icon(
-            onPressed: () {
-              setState(() {
-                KernelSUHelper.reset();
-              });
-            },
-            label: Icon(Icons.refresh),
+          leading: const Icon(Icons.list),
+          title: const Text("LKM List"),
+          trailing: Tooltip(
+            message: "Press me to refresh list",
+            child: ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  KernelSUHelper.reset();
+                });
+              },
+              label: const Icon(Icons.refresh),
+              
+            ),
           ),
         ),
         FutureBuilder(
@@ -790,9 +805,10 @@ class _MagiskListViewState extends State<MagiskListView> {
 }
 
 class APatchPage extends StatelessWidget {
-  const APatchPage({super.key});
+  // get non prerelease version
+  final bool _useLatest = false;
 
-  final bool isPatching = false;
+  const APatchPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -801,6 +817,19 @@ class APatchPage extends StatelessWidget {
       child: ListView(
         children: [
           CardTile(labelText: "Common", children: [
+            FutureBuilder(
+              future: ApatchHelper.getAPatchLatestVersionTag(_useLatest),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Container(
+                    alignment: Alignment.topCenter,
+                    child: const LinearProgressIndicator(),
+                  );
+                } else {
+                  return APatchLatestVersionListTile(labelText: snapshot.data);
+                }
+              },
+            ),
             const SizedBox(height: 10),
             TextField(
               controller: TextEditingController(text: ApatchSpec.superKey),
@@ -818,6 +847,41 @@ class APatchPage extends StatelessWidget {
                 title: Text("This component has not been implemented yet.")),
           ])
         ],
+      ),
+    );
+  }
+}
+
+class APatchLatestVersionListTile extends StatefulWidget {
+  const APatchLatestVersionListTile({super.key, required this.labelText});
+
+  final String? labelText;
+
+  @override
+  State<APatchLatestVersionListTile> createState() =>
+      _APatchLatestVersionListTileState();
+}
+
+class _APatchLatestVersionListTileState
+    extends State<APatchLatestVersionListTile> {
+  bool _useLatest = false;
+  String? labelText;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.cloud),
+      title: Text(labelText ?? (widget.labelText ?? "Could not fetch latest version")),
+      subtitle:
+          const Text("Change this switch to switch latest/stable channel"),
+      trailing: Switch(
+        value: _useLatest,
+        onChanged: (value) async {
+          labelText = await ApatchHelper.getAPatchLatestVersionTag(value);
+          setState(() {
+            _useLatest = value;
+          });
+        },
       ),
     );
   }

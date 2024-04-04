@@ -7,7 +7,7 @@ class ApatchHelper {
   static String? rawData;
   static dynamic jsonData;
 
-  Future<void> getAPatchReleasesInfo() async {
+  static Future<void> getAPatchReleasesInfo() async {
     Uri uri = Uri.parse(_githubApiUrlString);
 
     var response = await http.get(uri);
@@ -18,18 +18,25 @@ class ApatchHelper {
     }
   }
 
-  Future<String?> getAPatchLatestVersionTag(bool useLatest) async {
+  static Future<String?> getAPatchLatestVersionTag(bool useLatest) async {
     if (rawData == null) {
-      getAPatchReleasesInfo();
+      await getAPatchReleasesInfo();
     }
 
     if (rawData != null) {
       if (useLatest) {
         return jsonData[0]['tag_name'];
       } else {
-        
+        List releases = jsonData;
+
+        for (var element in releases) {
+          if (!element['prerelease']) {
+            return element['tag_name'];
+          }
+        }
       }
     }
+    return null;
   }
 
 }
