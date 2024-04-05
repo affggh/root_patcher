@@ -1,4 +1,4 @@
-import 'dart:developer';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:root_patcher/magisk_helper.dart';
 import 'package:root_patcher/kernelsu_helper.dart';
@@ -380,7 +381,15 @@ class _MagiskPatchPageState extends State<MagiskPatchPage> {
   @override
   Widget build(BuildContext context) {
     return CommonPatchScaffold(
-      onPatchPressed: () async {},
+      onPatchPressed: () async {
+        double progress = 0;
+        for (double i=0; i<1; i+=0.2) {
+          if (context.mounted) {
+          context.findAncestorStateOfType<CommonPatchScaffoldState>()?.changeProgressInfo("we are now at $i", progress);
+          }
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      },
       child: Column(
         children: [
           Expanded(
@@ -635,7 +644,6 @@ class _KernelSULKMListViewState extends State<KernelSULKMListView> {
                 });
               },
               label: const Icon(Icons.refresh),
-              
             ),
           ),
         ),
@@ -703,10 +711,34 @@ class CommonPatchScaffold extends StatefulWidget {
   final bool disabled;
 
   @override
-  State<CommonPatchScaffold> createState() => _CommonPatchScaffoldState();
+  State<CommonPatchScaffold> createState() => CommonPatchScaffoldState();
+
+  static CommonPatchScaffoldState? of(BuildContext context) =>
+    context.findAncestorStateOfType<CommonPatchScaffoldState>();
+
 }
 
-class _CommonPatchScaffoldState extends State<CommonPatchScaffold> {
+class CommonPatchScaffoldState extends State<CommonPatchScaffold> {
+  static String? _statusString;
+  static double? _progressValue;
+
+  void changeProgressInfo(String? statusString, double progressValue) =>
+    setState(() {
+      _statusString = statusString;
+      _progressValue = progressValue;
+    });
+
+  void changeProgressStatusString(String? statusString) =>
+    setState(() {
+      _statusString = statusString;
+    });
+  
+  void changeProgressValue(double? progressValue) =>
+    setState((){
+      _progressValue = progressValue;
+    });
+
+
   @override
   Widget build(BuildContext context) {
     void changeNavigateRialWhenPatching() {
@@ -745,22 +777,59 @@ class _CommonPatchScaffoldState extends State<CommonPatchScaffold> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  MyCfg.isPatching ?
+                  Expanded(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      child: Container(
+                        padding: const EdgeInsets.only(left:10, right: 10),
+                        child: Text(_statusString ?? "Test"),
+                      ),
+                    )
+                  ) : Container(),
+                  MyCfg.isPatching ?
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.only(left:10, right: 10),
+                      child: LinearProgressIndicator(
+                        value: _progressValue,
+                      ),
+                    )
+                  ) : Container(),
                   TextButton(
                     onPressed: !MyCfg.isPatching
                         ? () async {
                             setState(() {
                               MyCfg.isPatching = !MyCfg.isPatching;
                               changeNavigateRialWhenPatching();
+                              _statusString = null;
+                              _progressValue = null;
                             });
 
                             if (widget.onPatchPressed != null) {
                               await widget.onPatchPressed!();
                             }
 
+                            //setState(() {
+                            //  _statusString = "Done!";
+                            //  _progressValue = 1;
+                            //});
+                            //await Future.delayed(Duration(seconds: 1));
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(_statusString ?? "😟Seems not success"),
+                                  action: SnackBarAction(label: "OK", onPressed: () {},),
+                                )
+                              );
+                            }
+
                             setState(() {
                               MyCfg.isPatching = !MyCfg.isPatching;
                               changeNavigateRialWhenPatching();
                             });
+
+                            
                           }
                         : null,
                     child: const Text(
@@ -871,7 +940,8 @@ class _APatchLatestVersionListTileState
   Widget build(BuildContext context) {
     return ListTile(
       leading: const Icon(Icons.cloud),
-      title: Text(labelText ?? (widget.labelText ?? "Could not fetch latest version")),
+      title: Text(
+          labelText ?? (widget.labelText ?? "Could not fetch latest version")),
       subtitle:
           const Text("Change this switch to switch latest/stable channel"),
       trailing: Switch(
@@ -1271,7 +1341,38 @@ class _SettingsPageState extends State<SettingsPage> {
                 ListTile(
                   title: const Text("Version"),
                   trailing: Text(MyCfg.versionString),
-                )
+                ),
+                FutureBuilder(future: fetchGithubApiLimit(), builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const ListTile(
+                      title: Text("Github api access limit rate"),
+                      leading: Icon(Icons.rate_review),
+                      trailing: CircularProgressIndicator(),
+                    );
+                  } else {
+                    int limit = 0;
+                    int remaining = 0;
+                    int reset = 0;
+                    String subtitle = "Could not fetch github api limit rate";
+                    if (snapshot.data != null) {
+                      limit = snapshot.data['rate']['limit'];
+                      remaining = snapshot.data['rate']['remaining'];
+                      reset = snapshot.data['rate']['reset'];
+                      subtitle = "limit: $limit remaining: $remaining\nreset_time:${DateTime.fromMillisecondsSinceEpoch(reset*1000).toString()}";
+                    }
+
+                    return ListTile(
+                      leading: const Icon(Icons.rate_review),
+                      title: const Text("Github API rate limit"),
+                      subtitle: Text(subtitle),
+                      trailing: ElevatedButton.icon(onPressed: (){
+                        setState(() {
+                          
+                        });
+                      }, label: const Icon(Icons.refresh)),
+                    );
+                  }
+                })
               ]),
             ]),
           ),
@@ -1295,4 +1396,16 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ]));
   }
+}
+
+Future<dynamic> fetchGithubApiLimit() async {
+  var apiUrl = Uri.parse("https://api.github.com/rate_limit");
+
+  var response = await http.get(apiUrl);
+
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body);
+  }
+
+  return null;
 }
