@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:root_patcher/apatch_helper.dart';
+import 'package:root_patcher/patch_helper.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -381,15 +383,6 @@ class _MagiskPatchPageState extends State<MagiskPatchPage> {
   @override
   Widget build(BuildContext context) {
     return CommonPatchScaffold(
-      onPatchPressed: () async {
-        double progress = 0;
-        for (double i=0; i<1; i+=0.2) {
-          if (context.mounted) {
-          context.findAncestorStateOfType<CommonPatchScaffoldState>()?.changeProgressInfo("we are now at $i", progress);
-          }
-          await Future.delayed(const Duration(milliseconds: 500));
-        }
-      },
       child: Column(
         children: [
           Expanded(
@@ -493,6 +486,10 @@ class _MagiskApkSelectCardState extends State<MagiskApkSelectCard> {
                 if (result != null) {
                   setState(() {
                     _textEditingController.text = result.files.single.path!;
+                    MagiskSpec.localMagiskApk =
+                        (_textEditingController.text == "")
+                            ? null
+                            : result.files.single.path!;
                   });
                 }
               },
@@ -575,48 +572,48 @@ class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
   @override
   Widget build(BuildContext context) {
     return CommonPatchScaffold(
-        onPatchPressed: () async {},
+        //onPatchPressed: () async {},
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Row(children: [
-              Expanded(
-                  child: FilledButton.tonal(
-                      onPressed: () {
-                        showDialog(
-                            context: context,
-                            builder: (context) {
-                              return AlertDialog(
-                                title: const Text("Fetched kernel version"),
-                                content: Text(
-                                  (_kernelVersion == null)
-                                      ? "Could not fetch kernel version"
-                                      : "Fetched your kernel version is: $_kernelVersion",
-                                ),
-                                actions: [
-                                  TextButton(
-                                      onPressed: () {
-                                        Navigator.pop(context);
-                                      },
-                                      child: const Text("OK")),
-                                ],
-                              );
-                            });
-                      },
-                      child: const Text("Get kernel version"))),
-              const SizedBox(
-                width: 10,
-              ),
-              Expanded(
-                  child: FilledButton.tonal(
-                      onPressed: () {}, child: const Text("Try auto select"))),
-            ]),
-            const Expanded(
-              child: KernelSULKMListView(),
-            ),
-          ],
-        ));
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Row(children: [
+          Expanded(
+              child: FilledButton.tonal(
+                  onPressed: () {
+                    showDialog(
+                        context: context,
+                        builder: (context) {
+                          return AlertDialog(
+                            title: const Text("Fetched kernel version"),
+                            content: Text(
+                              (_kernelVersion == null)
+                                  ? "Could not fetch kernel version"
+                                  : "Fetched your kernel version is: $_kernelVersion",
+                            ),
+                            actions: [
+                              TextButton(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                  },
+                                  child: const Text("OK")),
+                            ],
+                          );
+                        });
+                  },
+                  child: const Text("Get kernel version"))),
+          const SizedBox(
+            width: 10,
+          ),
+          Expanded(
+              child: FilledButton.tonal(
+                  onPressed: () {}, child: const Text("Try auto select"))),
+        ]),
+        const Expanded(
+          child: KernelSULKMListView(),
+        ),
+      ],
+    ));
   }
 }
 
@@ -703,41 +700,38 @@ class CommonPatchScaffold extends StatefulWidget {
   const CommonPatchScaffold(
       {super.key,
       required this.child,
-      required this.onPatchPressed,
+      //required this.onPatchPressed,
       this.disabled = false});
 
   final Widget child;
-  final Future<void> Function()? onPatchPressed;
+  //final Future<void> Function()? onPatchPressed;
   final bool disabled;
 
   @override
   State<CommonPatchScaffold> createState() => CommonPatchScaffoldState();
 
   static CommonPatchScaffoldState? of(BuildContext context) =>
-    context.findAncestorStateOfType<CommonPatchScaffoldState>();
-
+      context.findAncestorStateOfType<CommonPatchScaffoldState>();
 }
 
 class CommonPatchScaffoldState extends State<CommonPatchScaffold> {
   static String? _statusString;
   static double? _progressValue;
 
-  void changeProgressInfo(String? statusString, double progressValue) =>
-    setState(() {
-      _statusString = statusString;
-      _progressValue = progressValue;
-    });
+  void changeProgressInfo(String? statusString, double? progressValue) =>
+      setState(() {
+        log("Info: $_statusString");
+        _statusString = statusString;
+        _progressValue = progressValue;
+      });
 
-  void changeProgressStatusString(String? statusString) =>
-    setState(() {
-      _statusString = statusString;
-    });
-  
-  void changeProgressValue(double? progressValue) =>
-    setState((){
-      _progressValue = progressValue;
-    });
+  void changeProgressStatusString(String? statusString) => setState(() {
+        _statusString = statusString;
+      });
 
+  void changeProgressValue(double? progressValue) => setState(() {
+        _progressValue = progressValue;
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -777,25 +771,25 @@ class CommonPatchScaffoldState extends State<CommonPatchScaffold> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  MyCfg.isPatching ?
-                  Expanded(
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      child: Container(
-                        padding: const EdgeInsets.only(left:10, right: 10),
-                        child: Text(_statusString ?? "Test"),
-                      ),
-                    )
-                  ) : Container(),
-                  MyCfg.isPatching ?
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.only(left:10, right: 10),
-                      child: LinearProgressIndicator(
-                        value: _progressValue,
-                      ),
-                    )
-                  ) : Container(),
+                  MyCfg.isPatching
+                      ? Expanded(
+                          child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          child: Container(
+                            padding: const EdgeInsets.only(left: 10, right: 10),
+                            child: Text(_statusString ?? "Test"),
+                          ),
+                        ))
+                      : Container(),
+                  MyCfg.isPatching
+                      ? Expanded(
+                          child: Container(
+                          padding: const EdgeInsets.only(left: 10, right: 10),
+                          child: LinearProgressIndicator(
+                            value: _progressValue,
+                          ),
+                        ))
+                      : Container(),
                   TextButton(
                     onPressed: !MyCfg.isPatching
                         ? () async {
@@ -806,30 +800,77 @@ class CommonPatchScaffoldState extends State<CommonPatchScaffold> {
                               _progressValue = null;
                             });
 
-                            if (widget.onPatchPressed != null) {
-                              await widget.onPatchPressed!();
+                            switch (MyHomePage.of(context).selectedIndex) {
+                              case 1:
+                                log("${MyCfg.magiskApkFromOnline}");
+                                log("${MagiskSpec.localMagiskApk}");
+                                if ((MyCfg.magiskApkFromOnline)
+                                    ? (MagiskSpec.magiskList == null)
+                                    : (MagiskSpec.localMagiskApk == null ||
+                                        !File(MagiskSpec.localMagiskApk!)
+                                            .existsSync())) {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) {
+                                      return const AlertDialog(
+                                        icon: Icon(Icons.error),
+                                        title: Text("Error"),
+                                        content: Text(
+                                            "Could not fetch magisk cause no magisk list can be found"),
+                                      );
+                                    },
+                                  );
+                                  break;
+                                }
+
+                                var key = MagiskSpec
+                                    .magiskList?[MagiskSpec.magiskSelection];
+                                var downloadUrl = MagiskSpec.magiskInfo == null
+                                    ? ''
+                                    : MagiskSpec
+                                        .magiskInfo![key]!['download_url'];
+                                await MagiskPatcher(MyCfg.bootImage,
+                                        fetchFromOnline:
+                                            MyCfg.magiskApkFromOnline,
+                                        localApk: MagiskSpec.localMagiskApk,
+                                        downloadUrl: downloadUrl,
+                                        arch: MagiskPatchPage.of(context)
+                                            .archsView
+                                            .toString()
+                                            .split('.')[1],
+                                        keepVerity: MagiskSpec.keepVerity,
+                                        keepForceEncrypt:
+                                            MagiskSpec.keepForceEncrypt,
+                                        patchRecovery: MagiskSpec.patchRecovery,
+                                        patchVbmetaFlag:
+                                            MagiskSpec.patchVbmetaFlag,
+                                        legacySAR: MagiskSpec.legacySAR)
+                                    .patch(changeProgressInfo);
+                                break;
+                              case 2:
+                                break;
+                              case 3:
+                                break;
+                              default:
+                                break;
                             }
 
-                            //setState(() {
-                            //  _statusString = "Done!";
-                            //  _progressValue = 1;
-                            //});
-                            //await Future.delayed(Duration(seconds: 1));
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(_statusString ?? "😟Seems not success"),
-                                  action: SnackBarAction(label: "OK", onPressed: () {},),
-                                )
-                              );
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(SnackBar(
+                                content: Text(
+                                    _statusString ?? "😟Seems not success"),
+                                action: SnackBarAction(
+                                  label: "OK",
+                                  onPressed: () {},
+                                ),
+                              ));
                             }
 
                             setState(() {
                               MyCfg.isPatching = !MyCfg.isPatching;
                               changeNavigateRialWhenPatching();
                             });
-
-                            
                           }
                         : null,
                     child: const Text(
@@ -882,7 +923,7 @@ class APatchPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CommonPatchScaffold(
-      onPatchPressed: () async {},
+      //onPatchPressed: () async {},
       child: ListView(
         children: [
           CardTile(labelText: "Common", children: [
@@ -1342,37 +1383,41 @@ class _SettingsPageState extends State<SettingsPage> {
                   title: const Text("Version"),
                   trailing: Text(MyCfg.versionString),
                 ),
-                FutureBuilder(future: fetchGithubApiLimit(), builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const ListTile(
-                      title: Text("Github api access limit rate"),
-                      leading: Icon(Icons.rate_review),
-                      trailing: CircularProgressIndicator(),
-                    );
-                  } else {
-                    int limit = 0;
-                    int remaining = 0;
-                    int reset = 0;
-                    String subtitle = "Could not fetch github api limit rate";
-                    if (snapshot.data != null) {
-                      limit = snapshot.data['rate']['limit'];
-                      remaining = snapshot.data['rate']['remaining'];
-                      reset = snapshot.data['rate']['reset'];
-                      subtitle = "limit: $limit remaining: $remaining\nreset_time:${DateTime.fromMillisecondsSinceEpoch(reset*1000).toString()}";
-                    }
+                FutureBuilder(
+                    future: fetchGithubApiLimit(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const ListTile(
+                          title: Text("Github api access limit rate"),
+                          leading: Icon(Icons.rate_review),
+                          trailing: CircularProgressIndicator(),
+                        );
+                      } else {
+                        int limit = 0;
+                        int remaining = 0;
+                        int reset = 0;
+                        String subtitle =
+                            "Could not fetch github api limit rate";
+                        if (snapshot.data != null) {
+                          limit = snapshot.data['rate']['limit'];
+                          remaining = snapshot.data['rate']['remaining'];
+                          reset = snapshot.data['rate']['reset'];
+                          subtitle =
+                              "limit: $limit remaining: $remaining\nreset_time:${DateTime.fromMillisecondsSinceEpoch(reset * 1000).toString()}";
+                        }
 
-                    return ListTile(
-                      leading: const Icon(Icons.rate_review),
-                      title: const Text("Github API rate limit"),
-                      subtitle: Text(subtitle),
-                      trailing: ElevatedButton.icon(onPressed: (){
-                        setState(() {
-                          
-                        });
-                      }, label: const Icon(Icons.refresh)),
-                    );
-                  }
-                })
+                        return ListTile(
+                          leading: const Icon(Icons.rate_review),
+                          title: const Text("Github API rate limit"),
+                          subtitle: Text(subtitle),
+                          trailing: ElevatedButton.icon(
+                              onPressed: () {
+                                setState(() {});
+                              },
+                              label: const Icon(Icons.refresh)),
+                        );
+                      }
+                    })
               ]),
             ]),
           ),

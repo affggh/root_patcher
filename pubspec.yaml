@@ -37,11 +37,14 @@ dependencies:
   cupertino_icons: ^1.0.6
   file_picker: ^8.0.0+1
   url_launcher: ^6.2.5
-  http: ^1.2.1
   percent_indicator: ^4.2.3
   dio: ^5.4.2+1
   shared_preferences: ^2.2.2
   window_manager: ^0.3.8
+  path: ^1.9.0
+  system_info2: ^4.0.0
+  http: ^1.2.1
+  archive: ^3.4.10
 
 dev_dependencies:
   flutter_test:
