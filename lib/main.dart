@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:developer';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:open_file/open_file.dart';
 import 'package:root_patcher/apatch_helper.dart';
 import 'package:root_patcher/patch_helper.dart';
 import 'package:window_manager/window_manager.dart';
@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as path;
 
 import 'package:root_patcher/magisk_helper.dart';
 import 'package:root_patcher/kernelsu_helper.dart';
@@ -720,7 +721,6 @@ class CommonPatchScaffoldState extends State<CommonPatchScaffold> {
 
   void changeProgressInfo(String? statusString, double? progressValue) =>
       setState(() {
-        log("Info: $_statusString");
         _statusString = statusString;
         _progressValue = progressValue;
       });
@@ -777,7 +777,7 @@ class CommonPatchScaffoldState extends State<CommonPatchScaffold> {
                           duration: const Duration(milliseconds: 300),
                           child: Container(
                             padding: const EdgeInsets.only(left: 10, right: 10),
-                            child: Text(_statusString ?? "Test"),
+                            child: Text(_statusString ?? "Patching..."),
                           ),
                         ))
                       : Container(),
@@ -800,69 +800,86 @@ class CommonPatchScaffoldState extends State<CommonPatchScaffold> {
                               _progressValue = null;
                             });
 
-                            switch (MyHomePage.of(context).selectedIndex) {
-                              case 1:
-                                log("${MyCfg.magiskApkFromOnline}");
-                                log("${MagiskSpec.localMagiskApk}");
-                                if ((MyCfg.magiskApkFromOnline)
-                                    ? (MagiskSpec.magiskList == null)
-                                    : (MagiskSpec.localMagiskApk == null ||
-                                        !File(MagiskSpec.localMagiskApk!)
-                                            .existsSync())) {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) {
-                                      return const AlertDialog(
-                                        icon: Icon(Icons.error),
-                                        title: Text("Error"),
-                                        content: Text(
-                                            "Could not fetch magisk cause no magisk list can be found"),
-                                      );
-                                    },
-                                  );
+                            bool result = false;
+                            if (context.mounted) {
+                              try {
+                              switch (MyHomePage.of(context).selectedIndex) {
+                                case 1:
+                                  if ((MyCfg.magiskApkFromOnline)
+                                      ? (MagiskSpec.magiskList == null)
+                                      : (MagiskSpec.localMagiskApk == null ||
+                                          !File(MagiskSpec.localMagiskApk!)
+                                              .existsSync())) {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) {
+                                        return const AlertDialog(
+                                          icon: Icon(Icons.error),
+                                          title: Text("Error"),
+                                          content: Text(
+                                              "Could not fetch magisk cause no magisk list can be found"),
+                                        );
+                                      },
+                                    );
+                                    break;
+                                  }
+
+                                  var key = MagiskSpec
+                                      .magiskList?[MagiskSpec.magiskSelection];
+                                  var downloadUrl = MagiskSpec.magiskInfo ==
+                                          null
+                                      ? ''
+                                      : MagiskSpec
+                                          .magiskInfo![key]!['download_url'];
+                                  var patcher = MagiskPatcher(MyCfg.bootImage,
+                                      fetchFromOnline:
+                                          MyCfg.magiskApkFromOnline,
+                                      localApk: MagiskSpec.localMagiskApk,
+                                      downloadUrl: downloadUrl,
+                                      arch: MagiskPatchPage.of(context)
+                                          .archsView
+                                          .toString()
+                                          .split('.')[1],
+                                      keepVerity: MagiskSpec.keepVerity,
+                                      keepForceEncrypt:
+                                          MagiskSpec.keepForceEncrypt,
+                                      patchRecovery: MagiskSpec.patchRecovery,
+                                      patchVbmetaFlag:
+                                          MagiskSpec.patchVbmetaFlag,
+                                      legacySAR: MagiskSpec.legacySAR);
+                                  result = await patcher.patch(changeProgressInfo);
                                   break;
+                                case 2:
+                                  break;
+                                case 3:
+                                  break;
+                                default:
+                                  break;
+                              }
+                              } catch (e) {
+                                if (context.mounted) {
+                                showDialog(context: context, builder:(context) {
+                                  return AlertDialog(
+                                    icon: const Icon(Icons.error),
+                                    title: const Text("Catch errors"),
+                                    content: Text("$e"),
+                                  );
+                                },);
                                 }
-
-                                var key = MagiskSpec
-                                    .magiskList?[MagiskSpec.magiskSelection];
-                                var downloadUrl = MagiskSpec.magiskInfo == null
-                                    ? ''
-                                    : MagiskSpec
-                                        .magiskInfo![key]!['download_url'];
-                                await MagiskPatcher(MyCfg.bootImage,
-                                        fetchFromOnline:
-                                            MyCfg.magiskApkFromOnline,
-                                        localApk: MagiskSpec.localMagiskApk,
-                                        downloadUrl: downloadUrl,
-                                        arch: MagiskPatchPage.of(context)
-                                            .archsView
-                                            .toString()
-                                            .split('.')[1],
-                                        keepVerity: MagiskSpec.keepVerity,
-                                        keepForceEncrypt:
-                                            MagiskSpec.keepForceEncrypt,
-                                        patchRecovery: MagiskSpec.patchRecovery,
-                                        patchVbmetaFlag:
-                                            MagiskSpec.patchVbmetaFlag,
-                                        legacySAR: MagiskSpec.legacySAR)
-                                    .patch(changeProgressInfo);
-                                break;
-                              case 2:
-                                break;
-                              case 3:
-                                break;
-                              default:
-                                break;
+                              }
                             }
-
                             if (context.mounted) {
                               ScaffoldMessenger.of(context)
                                   .showSnackBar(SnackBar(
                                 content: Text(
-                                    _statusString ?? "😟Seems not success"),
+                                    result ? "😊Seems success" : "😟Seems not success"),
                                 action: SnackBarAction(
-                                  label: "OK",
-                                  onPressed: () {},
+                                  label: result ? "Open folder" : "Fine",
+                                  onPressed: () {
+                                    if (result) {
+                                      OpenFile.open(path.join(File(Platform.resolvedExecutable).parent.path, "out/"));
+                                    }
+                                  },
                                 ),
                               ));
                             }

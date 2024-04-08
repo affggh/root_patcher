@@ -45,6 +45,8 @@ dependencies:
   system_info2: ^4.0.0
   http: ^1.2.1
   archive: ^3.4.10
+  open_file: ^3.3.2
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:

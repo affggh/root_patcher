@@ -1,13 +1,17 @@
 import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:archive/archive_io.dart';
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as path;
 import 'package:http/http.dart' as http;
 import 'package:dio/dio.dart';
 import 'package:system_info2/system_info2.dart';
 
 final dio = Dio();
+final workdirPath = path.join(File(Platform.resolvedExecutable).parent.path, 'tmp');
+final outdirPath = path.join(File(Platform.resolvedExecutable).parent.path, 'out');
 
 /// Function get current CPU architecture
 String getCPUArchitecture() {
@@ -185,40 +189,89 @@ class MagiskPatcher {
   bool patchRecovery;
   bool legacySAR;
 
-  Future<void> patch(
-    void Function(String? pstring, double? pvalue) changeProgressInfo,
+  // Create a dummy function receive progress info
+  void Function(String?, double?) changeProgressInfo = (String? a, double? b){
+    log("$a");
+  };
+
+  Future<bool> patch(
+    void Function(String? pstring, double? pvalue) setProgressInfo,
   ) async {
-    await Magiskboot.ensureMagiskbootBinary(changeProgressInfo);
-    if (Magiskboot.execPath == null) {
-      changeProgressInfo("Magiskboot binary path not set!", null);
-      return;
+    //changeProgressInfo = setProgressInfo;
+    ReceivePort receivePort = ReceivePort();
+
+    Isolate isolate = await Isolate.spawn(_patch, receivePort.sendPort);
+
+    bool result = await receivePort.first;
+
+    if (!Directory(workdirPath).existsSync()) {
+      Directory(workdirPath).createSync(recursive: true);
     }
 
-    if (bootimage == null) {
-      changeProgressInfo("Boot image is invalid", null);
-      return;
-    }
-
-    if (arch == null) {
-      changeProgressInfo("Arch not set!", null);
-      return;
-    }
-
-    changeProgressInfo("Prepare needed files...", null);
-    void changeProgressValue(double? value) =>
-        changeProgressInfo("Download magisk apk...", value);
-
-    var workdir = await Directory.systemTemp.createTemp();
-
-    log("Copy needed files...");
-    log("Created temp directory at: $workdir");
-    // get magisk app package
-    var magiskApk = path.join(workdir.path, "app.apk");
+    setProgressInfo('Prepare and patching ...', null);
+    changeProgressValue(double? value) => setProgressInfo("Download magisk apk...", value);
+    var magiskApk = path.join(workdirPath, 'app.apk');
     if (!fetchFromOnline) {
       File(localApk!).copySync(magiskApk);
     } else {
       await downloadFile(downloadUrl!, magiskApk, changeProgressValue);
     }
+
+    receivePort.close();
+    isolate.kill();
+    return result;
+  }
+
+  Future<void> _patch(
+    SendPort sendPort
+  ) async {
+    bool ret = false;
+    await Magiskboot.ensureMagiskbootBinary(changeProgressInfo);
+    if (Magiskboot.execPath == null) {
+      log("Magiskboot binary path not set!");
+      sendPort.send(ret);
+      return;
+    }
+
+    if (bootimage == null) {
+      log("Boot image is invalid");
+      sendPort.send(ret);
+      return;
+    }
+
+    if (arch == null) {
+      log("Arch not set!");
+      sendPort.send(ret);
+      return;
+    }
+
+    bool haveNonAsciiString(String input) {
+      for (var i = 0; i < input.length; i++) {
+        if (input.codeUnitAt(i) > 127) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    //var workdir = await Directory.systemTemp.createTemp();
+    var workdir = Directory(
+        path.join(File(Platform.resolvedExecutable).parent.path, 'tmp'));
+    workdir.createSync(recursive: true);
+    if (haveNonAsciiString(workdir.path)) {
+      throw Exception(
+          "Install dir contains non ascii char, please check install dir path");
+    }
+    var outdir = Directory(
+        path.join(File(Platform.resolvedExecutable).parent.path, 'out'));
+    if (!outdir.existsSync()) {
+      outdir.createSync(recursive: true);
+    }
+
+    log("Copy needed files...");
+    log("Created temp directory at: $workdir");
+    // get magisk app package
+    var magiskApk = path.join(workdir.path, "app.apk");
 
     magiskboot(List<String> args) =>
         Magiskboot.doMagiskbootCommand(args, workdir: workdir.path, env: {
@@ -232,6 +285,7 @@ class MagiskPatcher {
     var magiskArchive = File(magiskApk);
     if (!magiskArchive.existsSync()) {
       changeProgressInfo('Could not fetch magisk archive', null);
+      sendPort.send(ret);
       return;
     }
 
@@ -306,6 +360,7 @@ class MagiskPatcher {
 
     if (magiskVersionCode == null) {
       changeProgressInfo('Cannot find magisk version code', null);
+      sendPort.send(ret);
       return;
     }
     log("Find magisk version code is: $magiskVersionCode");
@@ -323,13 +378,16 @@ class MagiskPatcher {
         break;
       case 1:
         changeProgressInfo('! Unsupported/Unknown image format', null);
-        return;
+        sendPort.send(ret);
+      return;
       case 2:
         changeProgressInfo('- ChromeOS boot image not support', null);
-        return;
+        sendPort.send(ret);
+      return;
       default:
         changeProgressInfo('! Unable to unpack boot image', null);
-        return;
+        sendPort.send(ret);
+      return;
     }
 
     // Test patch status and do restore
@@ -423,7 +481,7 @@ class MagiskPatcher {
           mode: FileMode.append);
 
     if (sha1 != null) {
-      configFile.writeAsString("SHA1=$sha1", mode: FileMode.append);
+      configFile.writeAsStringSync("SHA1=$sha1", mode: FileMode.append);
     }
 
     result = magiskboot([
@@ -451,6 +509,7 @@ class MagiskPatcher {
 
     if (result.exitCode != 0) {
       changeProgressInfo('! Unable to patch ramdisk', null);
+      sendPort.send(ret);
       return;
     }
 
@@ -475,7 +534,8 @@ class MagiskPatcher {
         if (result.exitCode != 0) {
           changeProgressInfo(
               '! Boot image $dt was patched by old (unsupported) Magisk', null);
-          return;
+          sendPort.send(ret);
+      return;
         }
         result = magiskboot(['dtb', dt, 'patch']);
         if (result.exitCode == 0) {
@@ -522,9 +582,23 @@ class MagiskPatcher {
     ]);
 
     if (result.exitCode != 0) {
-      changeProgressInfo('! Unable to repack boot image', null);
+      //changeProgressInfo('! Unable to repack boot image', null);
+      sendPort.send(ret);
       return;
     }
+
+    var newBoot = File(path.join(workdir.path, 'new-boot.img'));
+
+    if (newBoot.existsSync()) {
+      var now = DateTime.now();
+      newBoot.copySync(path.join(outdir.path,
+          "magisk_patched_${DateFormat("yyyyMMdd_HHmmss").format(now)}.img"));
+      changeProgressInfo('Saved at: ${outdir.path}', 1);
+      ret = true;
+    }
+    //changeProgressInfo('- Done', null);
+    workdir.deleteSync(recursive: true);
+    sendPort.send(ret);
     return;
   }
 }
