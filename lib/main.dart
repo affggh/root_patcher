@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
 import 'package:root_patcher/apatch_helper.dart';
@@ -575,6 +576,7 @@ class KernelSUPatchPage extends StatefulWidget {
 
 class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
   String? _kernelVersion;
+  final selection = ValueNotifier(KernelSUSpec.ksuModuleSelection);
 
   @override
   Widget build(BuildContext context) {
@@ -641,6 +643,7 @@ class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
                             action:
                                 SnackBarAction(label: "OK", onPressed: () {}),
                           ));
+                          selection.value = KernelSUSpec.ksuModuleSelection;
                         } else {
                           showDialog(
                             context: context,
@@ -658,8 +661,8 @@ class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
                   },
                   child: const Text("Try suggest select"))),
         ]),
-        const Expanded(
-          child: KernelSULKMListView(),
+        Expanded(
+          child: KernelSULKMListView(selection),
         ),
       ],
     ));
@@ -667,7 +670,9 @@ class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
 }
 
 class KernelSULKMListView extends StatefulWidget {
-  const KernelSULKMListView({super.key});
+  const KernelSULKMListView(this.selection, {super.key});
+
+  final ValueListenable<int> selection;
 
   @override
   State<KernelSULKMListView> createState() => _KernelSULKMListViewState();
@@ -712,7 +717,7 @@ class _KernelSULKMListViewState extends State<KernelSULKMListView> {
               if (snapshot.data == null) {
                 return const Text("Cannot fetch data from github");
               }
-              return Expanded(child: KernelSULKMList(data: snapshot.data!));
+              return Expanded(child: KernelSULKMList(data: snapshot.data!, selection: widget.selection,));
             }
           },
         ),
@@ -722,17 +727,16 @@ class _KernelSULKMListViewState extends State<KernelSULKMListView> {
 }
 
 class KernelSULKMList extends StatefulWidget {
-  const KernelSULKMList({super.key, required this.data});
+  const KernelSULKMList({super.key, required this.data, required this.selection});
 
   final List<String> data;
+  final ValueListenable<int> selection;
 
   @override
   State<KernelSULKMList> createState() => _KernelSULKMListState();
 }
 
 class _KernelSULKMListState extends State<KernelSULKMList> {
-  int _lkmSelection = 0;
-
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
@@ -741,10 +745,13 @@ class _KernelSULKMListState extends State<KernelSULKMList> {
         return RadioListTile<int>(
             title: Text(widget.data[index]),
             value: index,
-            groupValue: _lkmSelection,
+            groupValue: KernelSUSpec.ksuModuleSelection,
             onChanged: (value) {
               setState(() {
-                _lkmSelection = value!;
+                KernelSUSpec.ksuModuleSelection = value!;
+                //context.findAncestorStateOfType<_KernelSUPatchPageState>()?.setState(() {
+                //  
+                //});
               });
             });
       },
