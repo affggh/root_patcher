@@ -1,10 +1,14 @@
-import  'dart:convert';
+import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as path;
+import 'package:root_patcher/patch_helper.dart';
 
 class KernelSUHelper {
-  static const String _githubApiUrlString = "https://api.github.com/repos/tiann/KernelSU/releases/latest";
+  static const String _githubApiUrlString =
+      "https://api.github.com/repos/tiann/KernelSU/releases/latest";
   static String? rawData;
   static dynamic jsonData;
 
@@ -24,12 +28,12 @@ class KernelSUHelper {
     jsonData = null;
   }
 
-  static Future<Map<String,String>> getKernelSUKPMInfo() async {
+  static Future<Map<String, String>> getKernelSUKPMInfo() async {
     if (rawData == null) {
       await getKernelSUReleasesInfo();
     }
 
-    Map<String,String> ret = {};
+    Map<String, String> ret = {};
 
     List? assets = jsonData["assets"];
 
@@ -41,7 +45,7 @@ class KernelSUHelper {
         ret[name] = durl;
       }
     });
-    
+
     return ret;
   }
 
@@ -52,23 +56,37 @@ class KernelSUHelper {
   }
 
   /// regex binary kernel banner
-  /// 
+  ///
   /// [file] Input kernel file
-  /// 
+  ///
   /// if matched, will return like "android13-5.15"
   /// if not, will return null
-  String? getKernelVersion(File file) {
+  static Future<String?> getKernelVersion(File file) async {
+    await Magiskboot.ensureMagiskbootBinary((String? a, double? b) {
+      log("$a");
+    });
+    var tmpDir = await Directory.systemTemp.createTemp();
+
+    magiskboot(List<String> args) => Magiskboot.doMagiskbootCommand(args,
+        workdir: tmpDir.path, env: {'MAGISKBOOT_WINSUP_NOCASE': '1'});
     //var linuxBanner = "Linux version ";
-    var regExp = RegExp(r"version ([0-9]+\.[0-9]+\.[0-9]+)-([a-zA-Z0-9]+)");
+    var regExp = RegExp(r"version ([0-9]+\.[0-9]+)\.[0-9]+-([a-zA-Z0-9]+)");
 
-    var data = String.fromCharCodes(file.readAsBytesSync());
+    await file.copy(path.join(tmpDir.path, 'boot.img'));
+    magiskboot(['unpack', 'boot.img']);
+    var kernel = File(path.join(tmpDir.path, 'kernel'));
 
-    var matches = regExp.allMatches(data);
+    if (await kernel.exists()) {
+      var data = String.fromCharCodes(await file.readAsBytes());
 
-    if (matches.isNotEmpty) {
-      return "${matches.first.group(2)}-${matches.first.group(1)}";
+      var matches = regExp.allMatches(data);
+
+      if (matches.isNotEmpty) {
+        return "${matches.first.group(2)}-${matches.first.group(1)}";
+      }
     }
 
+    await tmpDir.delete();
     return null;
   }
 }

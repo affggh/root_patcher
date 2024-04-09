@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -139,6 +140,9 @@ class MagiskSpec {
 
 class KernelSUSpec {
   static int ksuModuleSelection = 0;
+
+  static List<String>? ksuModuleList;
+  static Map<String, String>? ksuModuleInfo;
 }
 
 class ApatchSpec {
@@ -474,7 +478,9 @@ class _MagiskApkSelectCardState extends State<MagiskApkSelectCard> {
           child: TextFormField(
             controller: _textEditingController,
             onChanged: (value) {
-              MagiskSpec.localMagiskApk = value;
+              setState(() {
+                MagiskSpec.localMagiskApk = value;
+              });
             },
           )),
       Container(
@@ -581,26 +587,34 @@ class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
         Row(children: [
           Expanded(
               child: FilledButton.tonal(
-                  onPressed: () {
-                    showDialog(
-                        context: context,
-                        builder: (context) {
-                          return AlertDialog(
-                            title: const Text("Fetched kernel version"),
-                            content: Text(
-                              (_kernelVersion == null)
-                                  ? "Could not fetch kernel version"
-                                  : "Fetched your kernel version is: $_kernelVersion",
-                            ),
-                            actions: [
-                              TextButton(
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                  },
-                                  child: const Text("OK")),
-                            ],
-                          );
-                        });
+                  onPressed: () async {
+                    _kernelVersion = null;
+                    var _bootImage = File(MyCfg.bootImage ?? "");
+                    if (_bootImage.existsSync()) {
+                      _kernelVersion =
+                          await KernelSUHelper.getKernelVersion(_bootImage);
+                    }
+                    if (context.mounted) {
+                      showDialog(
+                          context: context,
+                          builder: (context) {
+                            return AlertDialog(
+                              title: const Text("Fetched kernel version"),
+                              content: Text(
+                                (_kernelVersion == null)
+                                    ? "Could not fetch kernel version"
+                                    : "Fetched your kernel version is: $_kernelVersion",
+                              ),
+                              actions: [
+                                TextButton(
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                    },
+                                    child: const Text("OK")),
+                              ],
+                            );
+                          });
+                    }
                   },
                   child: const Text("Get kernel version"))),
           const SizedBox(
@@ -608,7 +622,41 @@ class _KernelSUPatchPageState extends State<KernelSUPatchPage> {
           ),
           Expanded(
               child: FilledButton.tonal(
-                  onPressed: () {}, child: const Text("Try auto select"))),
+                  onPressed: () async {
+                    _kernelVersion = null;
+                    var _bootimage = File(MyCfg.bootImage ?? "");
+                    if (_bootimage.existsSync()) {
+                      _kernelVersion =
+                          await KernelSUHelper.getKernelVersion(_bootimage);
+
+                      if (_kernelVersion != null &&
+                          KernelSUSpec.ksuModuleList != null) {
+                        var kmi = KernelSUSpec.ksuModuleList
+                            ?.indexOf("${_kernelVersion}_kernelsu.ko");
+                        if (kmi != null || kmi! > 0) {
+                          //KernelSUSpec.ksuModuleSelection = kmi;
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(
+                                "Suggest you select ${_kernelVersion}_kernelsu.ko"),
+                            action:
+                                SnackBarAction(label: "OK", onPressed: () {}),
+                          ));
+                        } else {
+                          showDialog(
+                            context: context,
+                            builder: (context) => const AlertDialog(
+                              icon: Icon(Icons.warning),
+                              title: Text(
+                                  "Cannot suggest, please check on your phone"),
+                              content: Text(
+                                  "Cannot find your kernel version on given list"),
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
+                  child: const Text("Try suggest select"))),
         ]),
         const Expanded(
           child: KernelSULKMListView(),
@@ -626,6 +674,13 @@ class KernelSULKMListView extends StatefulWidget {
 }
 
 class _KernelSULKMListViewState extends State<KernelSULKMListView> {
+  Future<List<String>?> fetchData() async {
+    KernelSUSpec.ksuModuleInfo = await KernelSUHelper.getKernelSUKPMInfo();
+    KernelSUSpec.ksuModuleList = KernelSUSpec.ksuModuleInfo?.keys.toList();
+
+    return KernelSUSpec.ksuModuleList;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -646,7 +701,7 @@ class _KernelSULKMListViewState extends State<KernelSULKMListView> {
           ),
         ),
         FutureBuilder(
-          future: KernelSUHelper.getKernelSUKPMList(),
+          future: fetchData(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return Container(
@@ -803,81 +858,119 @@ class CommonPatchScaffoldState extends State<CommonPatchScaffold> {
                             bool result = false;
                             if (context.mounted) {
                               try {
-                              switch (MyHomePage.of(context).selectedIndex) {
-                                case 1:
-                                  if ((MyCfg.magiskApkFromOnline)
-                                      ? (MagiskSpec.magiskList == null)
-                                      : (MagiskSpec.localMagiskApk == null ||
-                                          !File(MagiskSpec.localMagiskApk!)
-                                              .existsSync())) {
-                                    showDialog(
-                                      context: context,
-                                      builder: (context) {
-                                        return const AlertDialog(
-                                          icon: Icon(Icons.error),
-                                          title: Text("Error"),
-                                          content: Text(
-                                              "Could not fetch magisk cause no magisk list can be found"),
-                                        );
-                                      },
-                                    );
-                                    break;
-                                  }
+                                switch (MyHomePage.of(context).selectedIndex) {
+                                  case 1:
+                                    if ((MyCfg.magiskApkFromOnline)
+                                        ? (MagiskSpec.magiskList == null)
+                                        : (MagiskSpec.localMagiskApk == null ||
+                                            !File(MagiskSpec.localMagiskApk!)
+                                                .existsSync())) {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) {
+                                          return const AlertDialog(
+                                            icon: Icon(Icons.error),
+                                            title: Text("Error"),
+                                            content: Text(
+                                                "Could not fetch magisk cause no magisk list can be found"),
+                                          );
+                                        },
+                                      );
+                                      break;
+                                    }
 
-                                  var key = MagiskSpec
-                                      .magiskList?[MagiskSpec.magiskSelection];
-                                  var downloadUrl = MagiskSpec.magiskInfo ==
-                                          null
-                                      ? ''
-                                      : MagiskSpec
-                                          .magiskInfo![key]!['download_url'];
-                                  var patcher = MagiskPatcher(MyCfg.bootImage,
-                                      fetchFromOnline:
-                                          MyCfg.magiskApkFromOnline,
-                                      localApk: MagiskSpec.localMagiskApk,
-                                      downloadUrl: downloadUrl,
-                                      arch: MagiskPatchPage.of(context)
-                                          .archsView
-                                          .toString()
-                                          .split('.')[1],
-                                      keepVerity: MagiskSpec.keepVerity,
-                                      keepForceEncrypt:
-                                          MagiskSpec.keepForceEncrypt,
-                                      patchRecovery: MagiskSpec.patchRecovery,
-                                      patchVbmetaFlag:
-                                          MagiskSpec.patchVbmetaFlag,
-                                      legacySAR: MagiskSpec.legacySAR);
-                                  result = await patcher.patch(changeProgressInfo);
-                                  break;
-                                case 2:
-                                  break;
-                                case 3:
-                                  break;
-                                default:
-                                  break;
-                              }
+                                    log("patch from local file: ${MagiskSpec.localMagiskApk}");
+                                    log("patch from online: ${MyCfg.magiskApkFromOnline}");
+
+                                    var key = MagiskSpec.magiskList?[
+                                        MagiskSpec.magiskSelection];
+                                    var downloadUrl = MagiskSpec.magiskInfo ==
+                                            null
+                                        ? ''
+                                        : MagiskSpec
+                                            .magiskInfo![key]!['download_url'];
+                                    var patcher = MagiskPatcher(MyCfg.bootImage,
+                                        fetchFromOnline:
+                                            MyCfg.magiskApkFromOnline,
+                                        localApk: MagiskSpec.localMagiskApk,
+                                        downloadUrl: downloadUrl,
+                                        arch: MagiskPatchPage.of(context)
+                                            .archsView
+                                            .toString()
+                                            .split('.')[1],
+                                        keepVerity: MagiskSpec.keepVerity,
+                                        keepForceEncrypt:
+                                            MagiskSpec.keepForceEncrypt,
+                                        patchRecovery: MagiskSpec.patchRecovery,
+                                        patchVbmetaFlag:
+                                            MagiskSpec.patchVbmetaFlag,
+                                        legacySAR: MagiskSpec.legacySAR);
+                                    result =
+                                        await patcher.patch(changeProgressInfo);
+                                    break;
+                                  case 2:
+                                    try {
+                                      var ksupatcher = KernelSUPatcher(
+                                          MyCfg.bootImage,
+                                          useLocalInit:
+                                              MyCfg.kernelsuUseInitSpecified,
+                                          localInit:
+                                              MyCfg.kernelsuInitSpecified,
+                                          moduleUrl: KernelSUSpec
+                                                  .ksuModuleInfo?[
+                                              KernelSUSpec.ksuModuleList?[
+                                                  KernelSUSpec
+                                                      .ksuModuleSelection]]);
+                                      result = await ksupatcher
+                                          .patch(changeProgressInfo);
+                                    } catch (e) {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) {
+                                          return AlertDialog(
+                                            icon: const Icon(Icons.error),
+                                            title: const Text("Catch errors"),
+                                            content: Text("$e"),
+                                          );
+                                        },
+                                      );
+                                    }
+                                    break;
+                                  case 3:
+                                    break;
+                                  default:
+                                    break;
+                                }
                               } catch (e) {
                                 if (context.mounted) {
-                                showDialog(context: context, builder:(context) {
-                                  return AlertDialog(
-                                    icon: const Icon(Icons.error),
-                                    title: const Text("Catch errors"),
-                                    content: Text("$e"),
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) {
+                                      return AlertDialog(
+                                        icon: const Icon(Icons.error),
+                                        title: const Text("Catch errors"),
+                                        content: Text("$e"),
+                                      );
+                                    },
                                   );
-                                },);
                                 }
                               }
                             }
                             if (context.mounted) {
                               ScaffoldMessenger.of(context)
                                   .showSnackBar(SnackBar(
-                                content: Text(
-                                    result ? "😊Seems success" : "😟Seems not success"),
+                                content: Text(result
+                                    ? "😊Seems success"
+                                    : "😟Seems not success"),
                                 action: SnackBarAction(
                                   label: result ? "Open folder" : "Fine",
                                   onPressed: () {
                                     if (result) {
-                                      OpenFile.open(path.join(File(Platform.resolvedExecutable).parent.path, "out/"));
+                                      OpenFile.open(path.join(
+                                          File(Platform.resolvedExecutable)
+                                              .parent
+                                              .path,
+                                          "out/"));
                                     }
                                   },
                                 ),

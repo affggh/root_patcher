@@ -7,11 +7,15 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as path;
 import 'package:http/http.dart' as http;
 import 'package:dio/dio.dart';
+import 'package:root_patcher/apatch_helper.dart';
 import 'package:system_info2/system_info2.dart';
 
 final dio = Dio();
-final workdirPath = path.join(File(Platform.resolvedExecutable).parent.path, 'tmp');
-final outdirPath = path.join(File(Platform.resolvedExecutable).parent.path, 'out');
+
+final workdirPath =
+    path.join(File(Platform.resolvedExecutable).parent.path, 'tmp');
+final outdirPath =
+    path.join(File(Platform.resolvedExecutable).parent.path, 'out');
 
 /// Function get current CPU architecture
 String getCPUArchitecture() {
@@ -190,26 +194,24 @@ class MagiskPatcher {
   bool legacySAR;
 
   // Create a dummy function receive progress info
-  void Function(String?, double?) changeProgressInfo = (String? a, double? b){
-    log("$a");
-  };
+  void Function(String?, double?) changeProgressInfo =
+      (String? a, double? b) => log("$a");
 
   Future<bool> patch(
     void Function(String? pstring, double? pvalue) setProgressInfo,
   ) async {
+    bool result = false;
     //changeProgressInfo = setProgressInfo;
     ReceivePort receivePort = ReceivePort();
-
-    Isolate isolate = await Isolate.spawn(_patch, receivePort.sendPort);
-
-    bool result = await receivePort.first;
 
     if (!Directory(workdirPath).existsSync()) {
       Directory(workdirPath).createSync(recursive: true);
     }
 
     setProgressInfo('Prepare and patching ...', null);
-    changeProgressValue(double? value) => setProgressInfo("Download magisk apk...", value);
+    changeProgressValue(double? value) =>
+        setProgressInfo("Download magisk apk...", value);
+
     var magiskApk = path.join(workdirPath, 'app.apk');
     if (!fetchFromOnline) {
       File(localApk!).copySync(magiskApk);
@@ -217,14 +219,36 @@ class MagiskPatcher {
       await downloadFile(downloadUrl!, magiskApk, changeProgressValue);
     }
 
-    receivePort.close();
-    isolate.kill();
+    try {
+      var archive = ZipDecoder().decodeBytes(File(magiskApk).readAsBytesSync());
+      var isMagiskApk = false;
+      for (var info in archive) {
+        if (info.name.contains('libmagisk')) {
+          isMagiskApk = true;
+          break;
+        }
+      }
+      if (!isMagiskApk) {
+        throw Exception("Not a valid magisk apk");
+      }
+    } catch (e) {
+      rethrow;
+    }
+
+    try {
+      Isolate isolate = await Isolate.spawn(_patch, receivePort.sendPort);
+
+      result = await receivePort.first;
+
+      receivePort.close();
+      isolate.kill();
+    } catch (e) {
+      throw Exception(e);
+    }
     return result;
   }
 
-  Future<void> _patch(
-    SendPort sendPort
-  ) async {
+  Future<void> _patch(SendPort sendPort) async {
     bool ret = false;
     await Magiskboot.ensureMagiskbootBinary(changeProgressInfo);
     if (Magiskboot.execPath == null) {
@@ -245,23 +269,14 @@ class MagiskPatcher {
       return;
     }
 
-    bool haveNonAsciiString(String input) {
-      for (var i = 0; i < input.length; i++) {
-        if (input.codeUnitAt(i) > 127) {
-          return true;
-        }
-      }
-      return false;
-    }
+    log("MagiskPatcher: patch from online: $fetchFromOnline");
+    log("MagiskPatcher: local file: $localApk");
 
     //var workdir = await Directory.systemTemp.createTemp();
     var workdir = Directory(
         path.join(File(Platform.resolvedExecutable).parent.path, 'tmp'));
     workdir.createSync(recursive: true);
-    if (haveNonAsciiString(workdir.path)) {
-      throw Exception(
-          "Install dir contains non ascii char, please check install dir path");
-    }
+
     var outdir = Directory(
         path.join(File(Platform.resolvedExecutable).parent.path, 'out'));
     if (!outdir.existsSync()) {
@@ -289,8 +304,13 @@ class MagiskPatcher {
       return;
     }
 
-    var archive = ZipDecoder().decodeBytes(magiskArchive.readAsBytesSync());
-
+    Archive archive;
+    try {
+      archive = ZipDecoder().decodeBytes(magiskArchive.readAsBytesSync());
+    } catch (e) {
+      sendPort.send(false);
+      return;
+    }
     var archValue = <String, String>{
           'arm64': 'arm64-v8a',
           'arm32': 'armeabi-v7a',
@@ -379,21 +399,21 @@ class MagiskPatcher {
       case 1:
         changeProgressInfo('! Unsupported/Unknown image format', null);
         sendPort.send(ret);
-      return;
+        return;
       case 2:
         changeProgressInfo('- ChromeOS boot image not support', null);
         sendPort.send(ret);
-      return;
+        return;
       default:
         changeProgressInfo('! Unable to unpack boot image', null);
         sendPort.send(ret);
-      return;
+        return;
     }
 
     // Test patch status and do restore
     changeProgressInfo('- Checking ramdisk status', null);
     int status;
-    String skip_backup = '';
+    String skipBackup = '';
     if (File(path.join(workdir.path, 'ramdisk.cpio')).existsSync()) {
       var result = magiskboot(
         ['cpio', 'ramdisk.cpio', 'test'],
@@ -401,7 +421,7 @@ class MagiskPatcher {
       status = result.exitCode;
     } else {
       status = 0;
-      skip_backup = '#';
+      skipBackup = '#';
     }
 
     String? sha1;
@@ -464,10 +484,10 @@ class MagiskPatcher {
         skip_64 = '';
       }
     }
-    String skip_stub = '#';
+    String skipStub = '#';
     if (File(path.join(workdir.path, 'stub.apk')).existsSync()) {
       magiskboot(['compress=xz', 'stub.apk', 'stub.xz']);
-      skip_stub = '';
+      skipStub = '';
     }
 
     var configFile = File(path.join(workdir.path, 'config'));
@@ -500,9 +520,9 @@ class MagiskPatcher {
             : ['add 0644 overlay.d/sbin/magisk.xz magisk.xz']) +
         [
           // Since magisk 26000
-          '$skip_stub add 0644 overlay.d/sbin/stub.xz stub.xz',
+          '$skipStub add 0644 overlay.d/sbin/stub.xz stub.xz',
           'patch',
-          '$skip_backup backup ramdisk.cpio.orig',
+          '$skipBackup backup ramdisk.cpio.orig',
           'mkdir 000 .backup',
           'add 000 .backup/.magisk config'
         ]);
@@ -535,7 +555,7 @@ class MagiskPatcher {
           changeProgressInfo(
               '! Boot image $dt was patched by old (unsupported) Magisk', null);
           sendPort.send(ret);
-      return;
+          return;
         }
         result = magiskboot(['dtb', dt, 'patch']);
         if (result.exitCode == 0) {
@@ -599,6 +619,135 @@ class MagiskPatcher {
     //changeProgressInfo('- Done', null);
     workdir.deleteSync(recursive: true);
     sendPort.send(ret);
+    return;
+  }
+}
+
+class KernelSUPatcher {
+  KernelSUPatcher(
+    this.bootImage, {
+    this.useLocalInit = false,
+    this.localInit,
+    this.moduleUrl,
+  });
+
+  String? bootImage;
+  bool useLocalInit;
+  String? localInit;
+  String? moduleUrl; // kmi module download url
+
+  static String arch = 'aarch64';
+
+  String ksuInitGithubRawUrl =
+      "https://raw.githubusercontent.com/tiann/KernelSU/main/userspace/ksud/bin/$arch/ksuinit";
+
+  Future<bool> patch(
+    void Function(String?, double?) changeProgressInfo,
+  ) async {
+    Magiskboot.ensureMagiskbootBinary(changeProgressInfo);
+
+    bool ret = false;
+
+    var workdir = Directory(workdirPath);
+    var outdir = Directory(outdirPath);
+    if (!workdir.existsSync()) {
+      workdir.createSync(recursive: true);
+    }
+
+    magiskboot(List<String> args) => Magiskboot.doMagiskbootCommand(
+      args, workdir: workdir.path, env: {
+        // for windows build magiskboot
+        'MAGISKBOOT_WINSUP_NOCASE': '1'
+      }
+    );
+
+    changeProgressInfo("Fetch ksuinit from github", null);
+    if (useLocalInit && localInit != null) {
+      if (!File(localInit!).existsSync()) {
+        throw Exception('Could not find local init');
+      }
+      File(localInit!).copySync(path.join(workdirPath, 'init'));
+    } else {
+      changeProgressValue(double? value) =>
+          changeProgressInfo("download ksuinit...", value);
+      await downloadFile(ksuInitGithubRawUrl,
+          path.join(workdir.path, 'init'), changeProgressValue);
+    }
+
+    if (moduleUrl == null) {
+      throw Exception("kmi version not defined");
+    } else {
+      changeProgressValue(double? value) =>
+          changeProgressInfo("download kmi module...", value);
+      await downloadFile(
+          moduleUrl!, path.join(workdir.path, 'kernelsu.ko'), changeProgressValue);
+    }
+
+    var bootimg = File(bootImage!);
+    if (!bootimg.existsSync()) {
+      throw Exception("boot image does not exist");
+    }
+
+    await bootimg.copy(path.join(workdir.path, 'boot.img'));
+
+    var result = magiskboot(
+      ['unpack', 'boot.img']
+    );
+
+    if (result.exitCode != 0) {
+      throw Exception('Unable to unpack boot image');
+    }
+
+    var no_ramdisk = !File(path.join(workdir.path, 'ramdisk.cpio')).existsSync();
+    var is_magisk_patched = magiskboot(['cpio', 'ramdisk.cpio', 'test']).exitCode == 1;
+
+    if (no_ramdisk || is_magisk_patched) {
+      throw Exception("Cannot work on magisk patched boot");
+    }
+
+    var is_kernelsu_patched = magiskboot(['cpio', 'ramdisk.cpio', 'exists kernelsu.ko']).exitCode == 0;
+    if (!is_kernelsu_patched) {
+      var status = magiskboot(['cpio', 'ramdisk.cpio', 'exists init']).exitCode == 0;
+      if (status) {
+        magiskboot(['cpio', 'ramdisk.cpio', 'mv init init.real']);
+      }
+    }
+
+    result = magiskboot(
+      ['cpio', 'ramdisk.cpio', 'add 0755 init init', 'add 0755 kernelsu.ko kernelsu.ko']
+    );
+    if (result.exitCode != 0) {
+      throw Exception("Magisk cpio command faild!");
+    }
+
+    magiskboot(['repack', 'boot.img']);
+
+    var now = DateTime.now();
+    var output = "kernelsu_patched_${DateFormat("yyyyMMdd_HHmmss").format(now)}.img";
+    await File(path.join(workdir.path, 'new-boot.img')).copy(path.join(outdir.path, output));
+    if (File(path.join(outdir.path, output)).existsSync()) {
+      ret = true;
+    }
+    await workdir.delete(recursive: true);
+
+    return ret;
+  }
+}
+
+
+class APatchPatcher {
+  APatchPatcher(
+    this.bootImage,{
+      this.useLocalKpimg = false,
+      this.localKpimg,
+    }
+  );
+
+  String? bootImage;
+  bool useLocalKpimg;
+  String? localKpimg;
+
+  Future<void> ensureKptoolsBinary() async {
     return;
   }
 }
